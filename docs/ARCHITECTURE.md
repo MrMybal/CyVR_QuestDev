@@ -15,6 +15,10 @@ Les formats et les événements utilisés suivent les références Android offic
 
 ## Threads et limites
 
+Les courbes OVR ont un worker indépendant (`metrics_capture.cpp`). Il suit les CSV par ADB, remet des instantanés immuables au rendu et copie les rapports nouveaux/modifiés vers la session locale. L’enregistreur conserve l’appareil et le mode CSV d’origine ; arrêt, annulation, changement de sélection et fermeture normale attendent sa tentative de restauration. Les jobs Core reçoivent un dossier sous `context.path`, sans conserver des chemins temporaires dans le contexte.
+
+`metrics_data.cpp` parse les colonnes CSV dynamiques et calcule des enveloppes min/max par pixel pour préserver les pics. `metrics_view.cpp` garde les axes temporels et le curseur communs, et ne dessine que les courbes visibles. Les échantillons absents restent NaN en mémoire et deviennent `null` dans les requêtes IA ; le contexte ne reçoit que le catalogue, les rapports et l’état de la vue.
+
 L’interface ne lance aucune commande ADB bloquante. Le worker effectue les requêtes et les actions ; un second thread lit le flux. Les résultats passent par une file synchronisée ; l’interface ignore les événements d’une ancienne session.
 
 La file des lignes est limitée à 16 Mo. Les lignes de plus de 256 Ko sont rejetées. Le journal est limité à 50 000 entrées et 64 Mo comptabilisés. Ses vues utilisent des identifiants stables et un `ImGuiListClipper`, puis construisent leurs index uniquement quand le contenu ou les filtres changent. Les états de pause des deux vues sont indépendants.

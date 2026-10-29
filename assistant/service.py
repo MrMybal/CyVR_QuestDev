@@ -84,7 +84,7 @@ def create_runtime(data_dir,host):
     for dependency in manifest.get('runtimeRequirements',[]):
         if dependency['id']=='python':dependency['path']=os.sys.executable
     runtime=Runtime(manifest,data_dir)
-    runtime.configure_inputs(Path(data_dir)/'inputs',fields={'push_file':['sourceFile']})
+    runtime.configure_inputs(Path(data_dir)/'inputs',fields={'push_file':['sourceFile'],'metrics_action':['sourceFile']})
     for operation in SPECS:
         def handler(context,parameters,name=operation):
             context.cancellation.check()
@@ -95,6 +95,8 @@ def create_runtime(data_dir,host):
             if name=='list_files':values['_output']=str(context.path('intermediates/listing.bin'))
             if name=='pull_file':values['_output']=str(context.path('outputs/'+download_name(values['path'])))
             if name=='plugin_action' and values.get('action')=='read_state':values['_output']=str(context.path('outputs/capture.cyovr'))
+            if name=='metrics_action' and values.get('action')=='export_csv':values['_output']=str(context.path('outputs/session.csv'))
+            if name=='record_metrics':values['_output']=str(context.path('outputs/session'))
             if name=='device_action' and values.get('action') in {'screenshot','perfetto','record_video','metrics_export'}:
                 filename={'screenshot':'screenshot.png','perfetto':'capture.perfetto-trace','record_video':'recording.mp4','metrics_export':'metrics'}[values['action']]
                 values['_output']=str(context.path('outputs/'+filename))

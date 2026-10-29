@@ -7,7 +7,7 @@
   "description": "Native Meta Quest development tools and live application context",
   "vendor": "Cyberalien",
   "author": "Cyberalien",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "executable": "questdev-tool",
   "categories": [
     "development",
@@ -20,7 +20,9 @@
     "device-actions",
     "application-logs",
     "device-files",
-    "configurable-plugins"
+    "configurable-plugins",
+    "metrics-curves",
+    "metrics-recording"
   ],
   "operations": [
     {
@@ -665,6 +667,131 @@
       }
     },
     {
+      "id": "read_metrics",
+      "name": "read_metrics",
+      "description": "Read the CSV metrics currently open in QuestDev. Dynamic metric IDs come from columns. Times are seconds from the first CSV timestamp; unavailable values are null. Returns bounded samples and recording state.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "metrics": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "default": []
+          },
+          "start": {
+            "type": "number",
+            "minimum": 0,
+            "default": 0
+          },
+          "end": {
+            "type": "number",
+            "minimum": 0
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2000,
+            "default": 100
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object"
+      },
+      "canRunAsync": true,
+      "canCancel": true,
+      "supportsProgress": false,
+      "supportedBackends": [],
+      "permissions": [],
+      "resourceRequirements": {
+        "ramBytes": 134217728
+      }
+    },
+    {
+      "id": "metrics_action",
+      "name": "metrics_action",
+      "description": "Open an imported CSV, export the current CSV into this job, refresh/open/follow an OVR report, pause CSV following or stop the active metrics recording. open_csv uses sourceFile imported automatically by Core. Remote path must be a direct CSV in CapturedMetrics. stop_record requires native action approval.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "open_csv",
+              "export_csv",
+              "refresh_reports",
+              "open_report",
+              "follow_report",
+              "pause",
+              "stop_record"
+            ]
+          },
+          "sourceFile": {
+            "type": "string",
+            "maxLength": 4096
+          },
+          "path": {
+            "type": "string",
+            "maxLength": 4096,
+            "default": ""
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object"
+      },
+      "canRunAsync": true,
+      "canCancel": true,
+      "supportsProgress": false,
+      "supportedBackends": [],
+      "permissions": [
+        "deviceControl"
+      ],
+      "resourceRequirements": {
+        "ramBytes": 134217728
+      }
+    },
+    {
+      "id": "record_metrics",
+      "name": "record_metrics",
+      "description": "Record OVR CSV sessions to the private Core job for 1-300 seconds. The job completes after final collection and CSV mode restoration; cancellation also restores owned CSV mode. An already active CSV mode is preserved. Does not launch/restart a game or change the HUD. filesSaved=0 explicitly means no CSV was produced. Export the job before finishing the task.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "seconds": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 300,
+            "default": 10
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object"
+      },
+      "canRunAsync": true,
+      "canCancel": true,
+      "supportsProgress": false,
+      "supportedBackends": [],
+      "permissions": [
+        "deviceControl"
+      ],
+      "resourceRequirements": {
+        "ramBytes": 134217728
+      }
+    },
+    {
       "id": "navigate",
       "name": "navigate",
       "description": "Show a native QuestDev page or select an application log tab.",
@@ -681,7 +808,8 @@
               "adb",
               "plugins",
               "assistant",
-              "files"
+              "files",
+              "metrics"
             ]
           },
           "package": {

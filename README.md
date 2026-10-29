@@ -1,10 +1,12 @@
-# CyVR QuestDev 0.4
+# CyVR QuestDev 0.5
 
 Outils de développement pour Meta Quest, en C++17, Win32 et DirectX 11, avec l’interface **CyUI / CyImgui_Interface**.
 
-Huit espaces possèdent leur propre navigation : **Console, Applications, Réglages, Appareil, ADB, Plugins, Assistant IA et Fichiers**. Une application conserve sa propre vue de logs, ses sous-processus et son historique, indépendamment des autres applications du casque.
+Neuf espaces possèdent leur propre navigation : **Console, Applications, Réglages, Appareil, ADB, Plugins, Assistant IA, Fichiers et Métriques**. Une application conserve sa propre vue de logs, ses sous-processus et son historique, indépendamment des autres applications du casque.
 
 ![Console par application](docs/images/console.png)
+
+![Courbes OVR — données de démonstration](docs/images/metrics-curves.png)
 
 ## Démarrer
 
@@ -21,8 +23,9 @@ Dans **Console**, la colonne de gauche propose **Actives**, **Installées** et *
 - **ADB** : shell Android ou arguments ADB, sortie progressive, délai maximal, tâches concurrentes, annulation, historique et export.
 - **Plugins** : OVR Metrics et CyInsightOVR configurables directement dans QuestDev, profils locaux, métriques/graphiques, placement du HUD, CSV, connexion au collecteur et captures GPU `.cyovr`. Manifestes `.cyplugin`, actions Android et tunnels TCP ADB forward/reverse. [Guide](docs/PLUGINS.md).
 - **Fichiers** : navigation dans le stockage, raccourcis par application, filtres, métadonnées, envoi/récupération, création de dossiers, renommage et suppression de fichiers ou de dossiers vides. Transferts en arrière-plan, annulation et remplacement explicite.
+- **Métriques** : toutes les colonnes disponibles des CSV OVR, sélection des courbes, zoom et curseur communs, suivi des écritures du casque, enregistrement sur PC, ouverture et export CSV. [Guide](docs/METRICS.md).
 - **Assistant IA** : discussion intégrée ou fenêtre séparée, contexte inspectable, choix du modèle, réponse progressive, annulation, politique des outils et configuration MCP.
-- **MCP / SDK** : véritable runtime [CyToolsCore 0.10.1 MIT](https://github.com/MrMybal/CyToolsCore), adaptateurs officiels HTTP/MCP et quatorze opérations communes avec l’interface native. Import automatique des sources locales et export durable des téléchargements.
+- **MCP / SDK** : véritable runtime [CyToolsCore 0.10.1 MIT](https://github.com/MrMybal/CyToolsCore), adaptateurs officiels HTTP/MCP et dix-sept opérations communes avec l’interface native. Import automatique des sources locales et export durable des téléchargements et enregistrements.
 
 - Capture simultanée des buffers Android `main`, `system`, `crash` et `events`.
 - Journaux par package, y compris les processus `package:service` et `package:renderer`.
@@ -80,6 +83,7 @@ Le mode de démonstration n’ouvre aucune connexion ADB :
 .\build\windows\CyVR_QuestDev.exe --demo
 .\build\windows\CyVR_QuestDev.exe --demo --compare --theme light-grey
 .\build\windows\CyVR_QuestDev.exe --package com.cyvr.player
+.\build\windows\CyVR_QuestDev.exe --page 8 --metrics-csv C:\captures\session.csv
 ```
 
 ## IA et extensions

@@ -1,8 +1,10 @@
 # Plugins QuestDev — API 1
 
-## Plugins inclus dans QuestDev 0.4
+## Plugins inclus dans QuestDev 0.5
 
 **Plugins → OVR Metrics Tool** configure le service `com.oculus.ovrmonitormetricsservice` : HUD, suivi de la tête, visibilité des graphiques/valeurs, inclinaison, rotation, échelle, distance, sélection indépendante de 30 métriques et CSV. Les rapports sont accessibles dans l’onglet **Rapports CSV**.
+
+**Rapports CSV → Courbes et enregistrement sur PC** ouvre la page **Métriques**, également accessible dans la barre principale. Elle découvre toutes les colonnes du CSV, indépendamment des 30 métriques configurables du HUD. Voir le [guide des courbes et sessions](METRICS.md).
 
 **Lire l’état** lit `LOG_STATE`, assemble le JSON fragmenté et rejette les réponses antérieures à la requête. **État du service → Copier l’état dans le profil** reprend les réglages observés, y compris la visibilité globale. **Appliquer au Quest** envoie le profil puis vérifie sa configuration réelle ; un broadcast accepté ou une valeur limitée par le service ne suffisent pas. Les sélections hors des 30 métriques gérées sont conservées. Leur affichage suit aussi les deux réglages de visibilité globale.
 

@@ -101,7 +101,7 @@ def main():
             service.send(type='context',context={'selectedDevice':'QUESTDEV_SMOKE_CONTEXT_17','session':42,'recentLogs':[]})
             time.sleep(.1)
         with QuestDevClient(connection) as client:
-            assert len(client.describe()['operations'])==14
+            assert len(client.describe()['operations'])==17
             context=client.invoke('get_context')['context']
             assert context.get('selectedDevice'),context
             if options.connection:

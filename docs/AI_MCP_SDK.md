@@ -24,7 +24,7 @@ Le JSON lance le Python privé et `assistant/tool.py mcp --connection <connectio
 
 Les plugins OVR Metrics et CyInsightOVR exposent leurs réglages par `list_plugins` et `plugin_action` avec `settings`. Consulter le [guide des plugins](PLUGINS.md) pour les actions, schémas, valeurs par défaut et exports `.cyovr` privés.
 
-Le catalogue comprend **14 opérations `op_*` et 21 contrôles CyTools**. Exemple :
+Le catalogue comprend **17 opérations `op_*` et 21 contrôles CyTools**. Exemple :
 
 1. `op_read_logs` avec `{"parameters":{"package":"com.cyvr.player","minimum":"E","limit":100}}` retourne un job.
 2. Lire `cy_get_job` avec `{"jobId":"..."}` jusqu’à `Completed`, `Failed` ou `Cancelled`.
@@ -65,9 +65,14 @@ with QuestDevClient() as quest:
 | `pull_file` | `path` Android absolu ; résultat privé `file`, `mimeType`, `source` |
 | `push_file` | `sourceFile` local, `destination` Android absolue, `overwrite=false` ; import automatique de la source par Core |
 | `file_action` | `action=mkdir|rename|delete`, `path`, `name` pour création/renommage ; dossiers vides uniquement à la suppression |
-| `navigate` | `page=console|applications|settings|device|adb|plugins|assistant|files`, `package` facultatif |
+| `navigate` | `page=console|applications|settings|device|adb|plugins|assistant|files|metrics`, `package` facultatif |
+| `read_metrics` | `metrics` : noms de colonnes, 16 maximum ; `start`, `end` en secondes relatives, `limit=1..2000` ; catalogue, état et valeurs manquantes `null` |
+| `metrics_action` | `action=open_csv|export_csv|refresh_reports|open_report|follow_report|pause|stop_record`, `sourceFile` pour l’import local ou `path` pour un rapport du dossier OVR |
+| `record_metrics` | `seconds=1..300` ; enregistrement CSV dans un dossier privé du job, attend la finalisation et la restauration CSV |
 
 Les actions appareil comprennent `screenshot`, `record_video`, `video_stop`, `perfetto`, `metrics_on/off/export`, `mirror_start/stop`, `browser` et les contrôles VR. Les fichiers retournent `file` et `mimeType`. Pour une vidéo de 180 secondes, prévoir `invoke(..., timeout=240)`. `video_stop` finalise l’enregistrement actif depuis une seconde opération.
+
+Les [courbes OVR](METRICS.md) partagent le moteur de la page Métriques. `read_metrics` est une lecture ; `metrics_action` et `record_metrics` nécessitent la capacité Core `deviceControl`. La politique native demande confirmation pour l’enregistrement et son arrêt. Les imports utilisent un instantané Core ; l’original est conservé. Exporter les résultats avant de fermer la tâche. Le contexte décrit les colonnes, les courbes sélectionnées, la plage et le curseur ; `read_metrics` fournit les échantillons demandés.
 
 Les actions suivent la politique de l’app : **Lecture seule / Demander avant action / Autoriser les actions**. Le défaut est une confirmation dans QuestDev, même pour un client externe. Refus, annulation, changement de casque et code ADB non nul remontent au job. L’annulation attend l’acquittement du worker natif. En cas de déconnexion physique, le nettoyage distant peut échouer ; le diagnostic est conservé et `screenrecord` reste borné par sa durée maximale.
 

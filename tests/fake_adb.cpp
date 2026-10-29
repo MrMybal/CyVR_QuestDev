@@ -11,6 +11,8 @@
 #include <fstream>
 #include <json.hpp>
 using J=nlohmann::json;
+static std::filesystem::path metricsRoot(){wchar_t value[32768]{};GetEnvironmentVariableW(L"QUEST_FAKE_METRICS_ROOT",value,32768);return value;}
+static void advanceMetrics(const std::filesystem::path& root){if(root.empty()||!std::filesystem::exists(root/L"enabled"))return;auto counter=root/L"counter";int n=0;{std::ifstream in(counter);in>>n;}++n;{std::ofstream out(counter);out<<n;}auto path=root/L"quest.csv";bool first=!std::filesystem::exists(path);std::ofstream out(path,std::ios::app);if(first)out<<"Time Stamp,average_frame_rate,app_gpu_time_microseconds,custom_extra\n";if(!std::filesystem::exists(root/L"suppress_samples"))out<<1000+n*100<<",90,"<<5000+n<<",-3\n";}
 static std::string decode(const std::string& text){std::string out;unsigned buffer=0;int bits=0;std::string digits="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";for(char c:text){auto at=digits.find(c);if(at==std::string::npos)break;buffer=(buffer<<6)|unsigned(at);bits+=6;if(bits>=8){bits-=8;out+=char((buffer>>bits)&255);}}return out;}
 int wmain(int argc,wchar_t** argv) {
     _setmode(_fileno(stdout),_O_BINARY);
@@ -37,16 +39,22 @@ int wmain(int argc,wchar_t** argv) {
     if(a[2]=="exec-out"){
         if(a.size()>5&&a[3]=="sh"){
             auto emit=[](std::initializer_list<std::string> fields){for(const auto& field:fields){std::cout<<field;std::cout.put('\0');}};
+            if(a.back().find("CapturedMetrics")!=std::string::npos){auto root=metricsRoot();if(root.empty()){emit({"CYVRFILES1","END"});return 0;}advanceMetrics(root);emit({"CYVRFILES1"});for(const auto& entry:std::filesystem::directory_iterator(root))if(entry.is_regular_file()&&entry.path().extension()==L".csv")emit({"f",std::to_string(entry.file_size()),"1700000000",entry.path().filename().u8string(),""});emit({"END"});return 0;}
             if(a.back().find("/denied")!=std::string::npos){emit({"CYVRERROR1","Fixture access denied"});return 0;}
             emit({"CYVRFILES1","d","4096","1700000000","Download","","d","4096","1700000000","Documents","","f","22","1700000000","readme.txt","","f","8","1700000001","équipe's file.txt","","l","10","1700000000","link","../outside","END"});return 0;
         }
         const char data[]={'P','N','G','\0','\r','\n',char(-1)};std::cout.write(data,sizeof(data));std::cerr<<"binary diagnostic\n";return 0;
     }
-    if(a[2]=="pull"&&a.size()==5){if(a[3]!="/sdcard/readme.txt"){std::cerr<<"Fixture file missing\n";return 1;}std::ofstream out(std::filesystem::path(argv[5]),std::ios::binary);out<<"fixture Quest payload\n";out.close();if(!out)return 1;std::cout<<"1 file pulled\n";return 0;}
+    if(a[2]=="pull"&&a.size()==5){
+        if(a[3].find("/CapturedMetrics/")!=std::string::npos){auto root=metricsRoot();auto source=root/std::filesystem::path(a[3]).filename();if(root.empty()||!std::filesystem::is_regular_file(source))return 1;std::ifstream input(source,std::ios::binary);std::ofstream out(std::filesystem::path(argv[5]),std::ios::binary);out<<input.rdbuf();if(!out)return 1;std::cout<<"1 report pulled\n";return 0;}
+        if(a[3]!="/sdcard/readme.txt"){std::cerr<<"Fixture file missing\n";return 1;}std::ofstream out(std::filesystem::path(argv[5]),std::ios::binary);out<<"fixture Quest payload\n";out.close();if(!out)return 1;std::cout<<"1 file pulled\n";return 0;
+    }
     if(a[2]=="forward"||a[2]=="reverse"){std::cout<<"8787\n";return 0;}
     if(a[2]!="shell" || a.size()<4)return 3;
     if(a[3].find("CYVR_METRICS_SINCE=")!=std::string::npos){
+        auto root=metricsRoot();if(!root.empty()){if(a[3].find("DISABLE_CSV")!=std::string::npos){std::error_code ec;std::filesystem::remove(root/L"enabled",ec);}else if(a[3].find("ENABLE_CSV")!=std::string::npos){std::ofstream out(root/L"enabled");out<<"fixture";}}
         J state={{"overlayEnabled",true},{"overlayHeadLocked",true},{"overlayPitch",8.0},{"overlayYaw",-12.0},{"overlayScale",1.0},{"overlayDistance",2.0},{"recordingMetricsEnabled",false},{"statsEnabled",false},{"graphEnabled",true},{"metrics",J::array({{{"name","Average FPS"},{"graphEnabled",true},{"statEnabled",false}},{{"name","App GPU Time (us)"},{"graphEnabled",true},{"statEnabled",false}}})}};
+        state["recordingMetricsEnabled"]=!root.empty()&&std::filesystem::exists(root/L"enabled");
         std::cout<<"CYVR_METRICS_SINCE=1234567890123\nI/SettingsBroadcastReceiver.Info.1234567890123( 1234): "<<state.dump()<<"\n";return 0;
     }
     if(a[3].find("org.cyinsights.ovr.ShellClient --request ")!=std::string::npos){
@@ -68,7 +76,7 @@ int wmain(int argc,wchar_t** argv) {
     else if(a[3]=="job-stream"){for(int i=0;i<4;++i){std::cout<<"chunk-"<<i<<"\n"<<std::flush;Sleep(20);}}
     else if(a[3]=="job-hang")Sleep(10000);
     else if(a[3]=="job-fail"){std::cout<<"expected error\n";return 17;}
-    else if(a[3].rfind("test -f ",0)==0){if(a[3].find("/sdcard/readme.txt")==std::string::npos){std::cout<<"Regular file required\n";return 1;}}
+    else if(a[3].rfind("test -f ",0)==0){if(a[3].find("/CapturedMetrics/")!=std::string::npos)return 0;if(a[3].find("/sdcard/readme.txt")==std::string::npos){std::cout<<"Regular file required\n";return 1;}}
     else if(a[3]=="cmd")std::cout<<"com.test.alpha/.MainActivity\n";
     else if(a[3]=="am")std::cout<<"Starting: Intent { cmp=com.test.alpha/.MainActivity }\n";
     else return 4;

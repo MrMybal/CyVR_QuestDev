@@ -1,5 +1,17 @@
 # Validation
 
+## Version 0.5 — courbes et enregistrements CSV OVR
+
+Validation effectuée le 29 octobre 2026, build Release Win32/DX11.
+
+- **149 contrôles C++** réussis : 39 moteur/backend, 36 plugins, 38 CSV/métriques, 36 fichiers. Les nouveaux contrôles couvrent CSV dynamiques (80 colonnes), timestamps en millisecondes, guillemets/CRLF/BOM, valeurs absentes, pics à faible résolution, fichiers incomplets, import/export asynchrones, enregistrement progressif, mode CSV préexistant, arrêt, annulation, changement de casque et fermeture normale. Un CSV ne contenant que l’en-tête est distingué d’un rapport avec mesures.
+- **13 tests Python** réussis avec CyToolsCore réel : nouveaux contrats, limites et permissions, import CSV automatiquement copié avec original préservé, fichiers et dossiers de session privés appartenant au job.
+- **37 rendus UI** réussis, dont Métriques dans les cinq thèmes. Inspection visuelle navy/light-grey : courbes continues, pic conservé, sélection latérale et commandes visibles.
+- `tools/verify_metrics.py` : application native, vrai Core HTTP/SDK et MCP officiel, ADB simulé. Import, catalogue, plage temporelle, valeurs absentes `null`, export durable après FinishTask, découverte des rapports, suivi d’un CSV qui grandit (ligne partielle différée), pause, confirmation d’enregistrement annulée avant exécution, fermeture et retrait de la connexion. Le catalogue MCP contient **38 outils**.
+- **Quest 3 réel** : lecture du mode CSV, enregistrement de deux secondes, finalisation et vérification que le mode CSV initial est restauré. Aucun rapport CSV n’a été produit pendant cette fenêtre. Cette vérification confirme les commandes et le nettoyage matériel ; la réception de mesures d’une application VR et la cadence de flush sur ce firmware restent à vérifier.
+
+Reproduire : `python tools/build.py --test`, `runtime/python/Scripts/python.exe -m unittest discover -s assistant/tests -v`, `python tools/verify_ui.py`, puis `runtime/python/Scripts/python.exe tools/verify_metrics.py`. Le dernier test nécessite qu’aucune autre instance QuestDev ne possède la connexion Core. Test matériel facultatif, application VR déjà ouverte : `quest_metrics_tests.exe --live <adb.exe> <serial>` depuis le dossier de build ; il active le CSV pendant deux secondes et restaure son état initial.
+
 ## Version 0.4 — plugins OVR Metrics et CyInsightOVR
 
 Validation effectuée le 29 octobre 2026, build Release Win32/DX11.

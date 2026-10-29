@@ -4,6 +4,7 @@
 #include "quest/assistant_bridge.hpp"
 #include "quest/files.hpp"
 #include "quest/metrics_plugins.hpp"
+#include "quest/metrics_view.hpp"
 #include <cyui/CyUI.h>
 #include <imgui.h>
 #define WIN32_LEAN_AND_MEAN
@@ -109,6 +110,8 @@ struct App::Impl {
     std::map<std::string,PluginPanel> pluginPanels;
     std::map<uint64_t,PluginRun> pluginRuns;
     std::map<uint64_t,std::wstring> pluginCapturePaths;
+    std::unique_ptr<MetricsView> metrics;
+    std::map<std::string,std::pair<MetricsTicket,uint64_t>> nativeMetrics;
     bool pluginTabRequest{true};
     bool mirror{},newPlugin{},confirmDevice{};
     std::string confirmationText;
@@ -151,13 +154,15 @@ struct App::Impl {
         }
         auto a=narrow(adb);strncpy_s(adbField.data(),adbField.size(),a.c_str(),_TRUNCATE);
         preview=std::make_unique<Preview>(options.graphicsDevice);reloadPlugins();
+        metrics=std::make_unique<MetricsView>(userRoot(),options.demo);
+        if(!options.metricsCsv.empty())metrics->capture().request("open_csv",options.metricsCsv);
         for(size_t i=0;i<plugins.size();++i)if(plugins[i].id==options.plugin)selectedPlugin=int(i);
         assistant=std::make_unique<AssistantBridge>();
         if(!options.demo){std::ifstream profile(userRoot()/L"ai-profile.json");Json j;try{profile>>j;provider=std::clamp(j.value("provider",0),0,6);auto copy=[&](auto& field,const char* key){strncpy_s(field.data(),field.size(),j.value(key,std::string()).c_str(),_TRUNCATE);};copy(aiModel,"model");copy(aiEndpoint,"endpoint");copy(aiKeyEnv,"api_key_env");copy(aiExecutable,"executable");}catch(...){} }
         if(options.demo){seedDemo();browseFiles(filesFolder);}
         else if(isFile((productRoot()/L"runtime/python/Scripts/python.exe").wstring()))startAssistant();
     }
-    ~Impl(){backend.reset();for(const auto& pair:tasks)if(pair.second.kind=="files:list"||pair.second.kind=="files:download"){std::error_code ec;std::filesystem::remove(pair.second.path,ec);}if(assistant)assistant->stop();}
+    ~Impl(){metrics.reset();backend.reset();for(const auto& pair:tasks)if(pair.second.kind=="files:list"||pair.second.kind=="files:download"){std::error_code ec;std::filesystem::remove(pair.second.path,ec);}if(assistant)assistant->stop();}
     void saveSettings() {
         if(options.demo)return;
         std::ofstream out(settingsPath());out<<"theme="<<cyui::currentThemeKey()<<"\nadb="<<narrow(adb)<<"\n";
@@ -182,6 +187,8 @@ struct App::Impl {
         openApp(options.package.empty()?packages[0].name:options.package);view.follow=false;second.package=packages[1].name;
     }
     void tick() {
+        metrics->capture().device(adb,serial,session,online&&!options.demo);
+        for(auto it=nativeMetrics.begin();it!=nativeMetrics.end();){if(it->second.first.result.wait_for(std::chrono::seconds(0))==std::future_status::ready){auto result=it->second.first.result.get();if(it->second.second!=session){result.ok=false;result.error="Le casque sélectionné a changé.";}replyNative(it->first,result.ok,result.data,result.error);it=nativeMetrics.erase(it);}else ++it;}
         tickAssistant();
         if(!backend)return;
         for(auto& e:backend->poll()) {
@@ -294,8 +301,10 @@ struct App::Impl {
         }catch(const std::exception& error){filesError=error.what();}
     }
     Json contextSnapshot() {
-        Json context={{"application","CyVR QuestDev"},{"version","0.4.0"},{"session",session},{"selectedDevice",serial},{"online",online},{"capturing",capturing},{"page",page},{"selectedPackage",view.package},{"devices",Json::array()},{"applications",Json::array()},{"plugins",Json::array()},{"recentLogs",Json::array()},{"deviceInfo",deviceInfo}};
-        context["pages"]={{"console",0},{"applications",1},{"settings",2},{"device",3},{"adb",4},{"plugins",5},{"assistant",6},{"files",7}};
+        Json context={{"application","CyVR QuestDev"},{"version","0.5.0"},{"session",session},{"selectedDevice",serial},{"online",online},{"capturing",capturing},{"page",page},{"selectedPackage",view.package},{"devices",Json::array()},{"applications",Json::array()},{"plugins",Json::array()},{"recentLogs",Json::array()},{"deviceInfo",deviceInfo}};
+        context["pages"]={{"console",0},{"applications",1},{"settings",2},{"device",3},{"adb",4},{"plugins",5},{"assistant",6},{"files",7},{"metrics",8}};
+        context["metrics"]=metrics->describe();
+        context["metricsUsage"]="Metrics page: open OVR CSV, select columns, shared time zoom/pan/cursor. Refresh reports with metrics_action to discover remote paths; read_metrics returns bounded samples (missing=null), seconds from first CSV timestamp. record_metrics waits for CSV collection/restoration, needs a running VR app, and may return filesSaved=0. Follow cadence depends on OVR file writes. Export Core recordings before FinishTask. UI recordings persist on PC.";
         context["fileBrowser"]={{"directory",filesFolder},{"selected",selectedFile>=0&&selectedFile<int(filesEntries.size())?filesEntries[size_t(selectedFile)].name:""},{"loading",filesTask!=0},{"entries",filesEntries.size()},{"error",filesError.substr(0,1000)}};
         context["consoleFilters"]={{"search",view.search.data()},{"exclude",view.exclude.data()},{"tag",view.tag.data()},{"minimumIndex",view.minimum},{"pid",view.pid},{"paused",view.paused},{"follow",view.follow},{"showProcessEvents",view.events}};
         context["usage"]={"Files: browse accessible Quest folders, transfer regular files, create/rename entries and delete files or empty directories. No root access or recursive deletion. Core imports upload sources automatically and owns downloaded task files.","Each page has its own sidebar. Select a package in Console to open its retained application log.","Logs are assigned by timestamped PID lifetime and exact package/subprocess name; unknown origins remain system/unassigned. Shared UIDs do not imply shared applications.","The log buffer retains at most 50000 lines / 64 MB. Pausing a view does not stop capture.","Device Actions uses asynchronous ADB jobs; ADB page shows output, history and cancellation. Cast is a screencap preview without audio.","Plugins are validated .cyplugin manifests; an ADB tunnel requires an actual TCP service in the target app.","Core operation files belong to private tasks. Export results before FinishTask deletes temporary files.","Native QuestDev tool calls are available in Codex. Other integrated providers currently receive text context; external AI clients can use the MCP catalogue."};
@@ -330,12 +339,13 @@ struct App::Impl {
                 if(e.value("deviceSession",uint64_t(0))!=session){replyNative(e.value("id",std::string()),false,Json::object(),"Le casque sélectionné a changé.");continue;}
                 auto op=e.value("operation",std::string());auto parameters=e.value("parameters",Json::object());auto action=parameters.value("action",std::string());
                 bool pluginRead=op=="plugin_action"&&(action=="read_state"||action=="catalog"||action=="status")&&std::any_of(plugins.begin(),plugins.end(),[&](const Plugin& p){return configurablePlugin(p)&&p.id==parameters.value("plugin",std::string());});
-                bool mutating=op=="adb_execute"||op=="device_action"||op=="application_action"||(op=="plugin_action"&&!pluginRead)||op=="push_file"||op=="file_action";
+                bool mutating=op=="adb_execute"||op=="device_action"||op=="application_action"||(op=="plugin_action"&&!pluginRead)||op=="push_file"||op=="file_action"||op=="record_metrics"||(op=="metrics_action"&&action=="stop_record");
                 if(mutating&&aiPolicy==0)replyNative(e.value("id",std::string()),false,Json::object(),"Actions refusées : lecture seule.");
                 else if(mutating&&aiPolicy==1)approvals.push_back(e);else executeNative(e);
             }else if(type=="native_cancel"){
                 auto id=e.value("id",std::string());auto at=std::find_if(approvals.begin(),approvals.end(),[&](const Json& a){return a.value("id",std::string())==id;});if(at!=approvals.end()){approvals.erase(at);replyNative(id,false,Json::object(),"Annulé.");}
                 for(const auto& [job,request]:nativeJobs)if(request==id&&backend)backend->cancel(job);
+                if(nativeMetrics.count(id))metrics->capture().cancel(nativeMetrics[id].first.id);
             }
         }
         auto now=std::chrono::steady_clock::now();if(assistantReady&&assistant->running()&&now>=nextContext){assistant->send({{"type","context"},{"context",contextSnapshot()}});nextContext=now+std::chrono::seconds(1);}
@@ -345,9 +355,16 @@ struct App::Impl {
         auto id=request.value("id",std::string()),op=request.value("operation",std::string());auto p=request.value("parameters",Json::object());
         if(request.value("deviceSession",uint64_t(0))!=session){replyNative(id,false,Json::object(),"Le casque a changé.");return;}
         try{
+            if(op=="read_metrics"){replyNative(id,true,metrics->capture().query(p));return;}
+            if(op=="metrics_action"||op=="record_metrics"){
+                metrics->capture().device(adb,serial,session,online&&!options.demo);
+                std::string action=op=="record_metrics"?"record_timed":p.at("action").get<std::string>();std::filesystem::path path;
+                if(action=="open_csv")path=widen(p.at("sourceFile").get<std::string>());else if(action=="export_csv"||action=="record_timed")path=widen(p.at("_output").get<std::string>());
+                auto ticket=metrics->capture().request(action,path,p.value("path",std::string()),p.value("seconds",10));nativeMetrics[id]={std::move(ticket),session};return;
+            }
             if(op=="list_applications"){Json apps=Json::array();auto query=lower(p.value("query",std::string())),category=p.value("category",std::string("all"));for(const auto& pkg:packages){auto c=counts[pkg.name];if(lower(pkg.name).find(query)==std::string::npos||(category=="user"&&pkg.system)||(category=="system"&&!pkg.system)||(category=="running"&&!c.processes))continue;apps.push_back({{"package",pkg.name},{"uid",pkg.uid},{"system",pkg.system},{"processes",c.processes},{"logs",c.lines}});}replyNative(id,true,{{"applications",apps}});return;}
             if(op=="list_plugins"){replyNative(id,true,{{"plugins",contextSnapshot()["plugins"]}});return;}
-            if(op=="navigate"){const std::map<std::string,int> pages={{"console",0},{"applications",1},{"settings",2},{"device",3},{"adb",4},{"plugins",5},{"assistant",6},{"files",7}};page=pages.at(p.value("page",std::string()));auto pkg=p.value("package",std::string());if(!pkg.empty())openApp(pkg);replyNative(id,true,{{"page",page}});return;}
+            if(op=="navigate"){const std::map<std::string,int> pages={{"console",0},{"applications",1},{"settings",2},{"device",3},{"adb",4},{"plugins",5},{"assistant",6},{"files",7},{"metrics",8}};page=pages.at(p.value("page",std::string()));auto pkg=p.value("package",std::string());if(!pkg.empty())openApp(pkg);replyNative(id,true,{{"page",page}});return;}
             if(op=="read_logs"||op=="export_logs"){
                 LogFilter filter;auto pkg=p.value("package",std::string());if(!pkg.empty())filter.packages.insert(pkg);filter.text=lower(p.value("text",std::string()));filter.minimum=severity(p.value("minimum",std::string("V"))[0]);
                 std::vector<const LogEntry*> entries;for(const auto& e:store.entries())if(filter.matches(e))entries.push_back(&e);
@@ -455,7 +472,7 @@ struct App::Impl {
         if(cyui::beginTopBar("##top",cyui::dp(62))) {
             ImGui::BeginGroup();cyui::heading("CyVR QuestDev",2);cyui::textFaint("OUTILS DÉVELOPPEUR / META QUEST");ImGui::EndGroup();
             ImGui::SameLine(0,cyui::dp(44));
-            const char* pages[]={"Console","Applications","Réglages","Appareil","ADB","Plugins","Assistant IA","Fichiers"};cyui::segmented("##pages",pages,8,&page,cyui::dp(680));
+            const char* pages[]={"Console","Applications","Réglages","Appareil","ADB","Plugins","Assistant IA","Fichiers","Métriques"};cyui::segmented("##pages",pages,9,&page,cyui::dp(740));
             ImGui::SameLine();cyui::alignRight(cyui::dp(300));
             ImGui::SetNextItemWidth(cyui::dp(255));
             std::string label=serial.empty()?"Sélectionner un casque":serial;
@@ -677,6 +694,7 @@ struct App::Impl {
             for(size_t i=0;i<plugins.size();++i){auto& p=plugins[i];ImGui::PushID(int(i));if(cyui::sidebarItem(cyui::icon::library,p.name.empty()?p.path.filename().string().c_str():p.name.c_str(),selectedPlugin==int(i),!p.error.empty()?"!":configurablePlugin(p)?"HUD":"ADB"))selectedPlugin=int(i);ImGui::PopID();}
         }else if(page==2){
             cyui::overline("RÉGLAGES");cyui::space(10);cyui::textDim("Connexion ADB");cyui::textDim("Apparence");cyui::textDim("Comportement du journal");cyui::divider();if(cyui::sidebarItem(cyui::icon::code,"MCP / SDK et IA",false))page=6;cyui::textFaint("CyUI · Dear ImGui\nCyToolsCore · MIT");
+        }else if(page==8){metrics->sidebar();
         }else if(page==7){
             cyui::overline("FICHIERS DU QUEST");cyui::space(10);
             const std::pair<const char*,const char*> shortcuts[]={{"Stockage partagé","/sdcard"},{"Téléchargements","/sdcard/Download"},{"Documents","/sdcard/Documents"},{"Images","/sdcard/Pictures"},{"Vidéos","/sdcard/Movies"},{"Données des applications","/sdcard/Android/data"},{"Extensions OBB","/sdcard/Android/obb"},{"Dossier temporaire ADB","/data/local/tmp"}};
@@ -809,6 +827,7 @@ struct App::Impl {
                     }cyui::endCard();
                 }else{
                     ImGui::TextWrapped("Les rapports CSV sont produits par OVR Metrics Tool dans le dossier CapturedMetrics du casque.");
+                    if(cyui::primaryButton("Courbes et enregistrement sur PC")){page=8;if(online&&!options.demo)metrics->capture().request("refresh_reports");}
                     {cyui::ScopedDisabled scope(disabled);if(cyui::button("Démarrer le CSV"))run("csv_start");ImGui::SameLine();if(cyui::button("Arrêter le CSV"))run("csv_stop");}
                 }
                 cyui::space(12);{cyui::ScopedDisabled scope(!online&&!options.demo);if(cyui::button(companion?"Parcourir les captures .cyovr":"Parcourir les rapports CSV")){browseFiles(companion?"/sdcard/Android/data/org.cyinsights.ovr/files/Captures":"/sdcard/Android/data/com.oculus.ovrmonitormetricsservice/files/CapturedMetrics");page=7;}}
@@ -1024,7 +1043,7 @@ struct App::Impl {
         if(ImGui::BeginTable("##workspaceSplit",2,ImGuiTableFlags_Resizable|ImGuiTableFlags_BordersInnerV)) {
             ImGui::TableSetupColumn("Applications",ImGuiTableColumnFlags_WidthFixed,cyui::dp(282));ImGui::TableSetupColumn("Main",ImGuiTableColumnFlags_WidthStretch);
             ImGui::TableNextColumn();ImGui::BeginChild("##sidebar");contextSidebar();ImGui::EndChild();
-            ImGui::TableNextColumn();ImGui::BeginChild("##main");if(page==0)console();else if(page==1)applications();else if(page==2)settings();else if(page==3)deviceActions();else if(page==4)terminal();else if(page==5)pluginPage();else if(page==7)filesPage();else assistantPage();ImGui::EndChild();
+            ImGui::TableNextColumn();ImGui::BeginChild("##main");if(page==0)console();else if(page==1)applications();else if(page==2)settings();else if(page==3)deviceActions();else if(page==4)terminal();else if(page==5)pluginPage();else if(page==7)filesPage();else if(page==8)metrics->draw();else assistantPage();ImGui::EndChild();
             ImGui::EndTable();
         }ImGui::End();if(floatingAssistant){ImGui::SetNextWindowSize(cyui::dp(850,750),ImGuiCond_FirstUseEver);if(ImGui::Begin("Discussion IA",&floatingAssistant))assistantPage();ImGui::End();}modals();cyui::renderNotifications();
     }
