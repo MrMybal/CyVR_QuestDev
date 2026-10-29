@@ -1,0 +1,8 @@
+[plugin]
+api=1
+id=meta.ovr-metrics
+name=OVR Metrics Tool
+version=1.0.0
+description=Configuration du HUD Meta : graphiques, valeurs, position et rapports CSV. Lecture des réglages par LOG_STATE.
+package=com.oculus.ovrmonitormetricsservice
+controller=ovr_metrics

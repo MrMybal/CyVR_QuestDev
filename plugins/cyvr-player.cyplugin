@@ -1,0 +1,19 @@
+[plugin]
+api=1
+id=cyvr.player
+name=CyVR Player
+version=1.0
+description=Accès au player installé : état Android, activité et fichiers de l’application.
+package=com.cyvr.player
+
+[action.status]
+label=État de l’application
+shell=dumpsys package {package}
+
+[action.data]
+label=Lister les fichiers accessibles
+shell=ls -la /sdcard/Android/data/{package}/files
+
+[action.activity]
+label=Activité en cours
+shell=dumpsys activity activities

@@ -1,0 +1,8 @@
+[plugin]
+api=1
+id=cyinsights.ovr
+name=CyInsightOVR
+version=1.0.0
+description=Compagnon Quest CyInsights : HUD configurable, compteurs et captures de tuiles GPU via son collecteur authentifié.
+package=org.cyinsights.ovr
+controller=cyinsight_ovr

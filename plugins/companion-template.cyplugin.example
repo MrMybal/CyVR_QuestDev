@@ -1,0 +1,16 @@
+[plugin]
+api=1
+id=studio.companion
+name=Mon application compagnon
+version=1.0
+description=Relie le service TCP fourni par mon application Quest à localhost sur le PC.
+package=com.example.companion
+
+[link]
+local_port=8787
+remote_port=8787
+direction=forward
+
+[action.ping]
+label=État Android
+shell=dumpsys package {package}
