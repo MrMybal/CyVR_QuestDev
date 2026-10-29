@@ -6,6 +6,10 @@ Le code original de CyVR QuestDev est sous **GNU GPLv3 uniquement** (`GPL-3.0-on
 
 Bibliothèque de widgets et thèmes, liée depuis le dossier indiqué par `CYUI_ROOT` ou détecté près du projet. Licence MIT, copyright 2026 Cyberalien. Le code d’hébergement Win32/DX11 est adapté de son exemple. Notice complète : [licenses/CyUI.txt](licenses/CyUI.txt).
 
+## CyVR_UI — projet associé
+
+[CyVR_UI](https://github.com/MrMybal/CyVR_UI) est distribué sous licence [MIT](https://github.com/MrMybal/CyVR_UI/blob/main/LICENSE).
+
 ## Dear ImGui
 
 Sources et backends Win32/DirectX 11 fournis par le dépôt CyUI. Licence MIT, copyright 2014–2026 Omar Cornut. Notice complète : [licenses/ImGui.txt](licenses/ImGui.txt).

@@ -15,3 +15,7 @@ Third-party components retain their own copyright notices and licenses.
 In particular, assistant/providers, third_party/json.hpp and the CyToolsCore
 wheel are covered by the licenses identified in THIRD_PARTY.md, LICENCES/
 and licenses/. Their notices are preserved; this notice does not replace them.
+
+Related project: CyVR_UI (MIT License)
+https://github.com/MrMybal/CyVR_UI
+https://github.com/MrMybal/CyVR_UI/blob/main/LICENSE
