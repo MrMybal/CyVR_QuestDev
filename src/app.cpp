@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Cyberalien
+// SPDX-License-Identifier: GPL-3.0-only
+
 #include "quest/app.hpp"
 #include "quest/plugins.hpp"
 #include "quest/preview.hpp"
@@ -942,6 +945,11 @@ struct App::Impl {
     }
     void settings() {
         cyui::panelHeader("Réglages", "Connexion, apparence et fonctionnement du journal.");cyui::space(12);
+        if(cyui::beginCard("##license","CYVR QUESTDEV · GPLv3")) {
+            cyui::textDim("Copyright © 2026 Cyberalien · GPL-3.0-only");
+            ImGui::TextWrapped("Logiciel libre : vous pouvez le redistribuer et le modifier selon la GNU GPL version 3. Fourni sans aucune garantie. Les composants tiers conservent leurs propres licences.");
+            if(cyui::button("Lire la licence GPLv3"))openLocal(appRoot()/L"LICENSE.txt");
+        }cyui::endCard();cyui::space(10);
         if(cyui::beginCard("##adb","ANDROID DEBUG BRIDGE")) {
             if(cyui::beginProperties("##adbProps",cyui::dp(140))) {
                 cyui::property("Exécutable ADB");ImGui::InputText("##adbPath",adbField.data(),adbField.size());

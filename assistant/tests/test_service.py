@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Cyberalien
+# SPDX-License-Identifier: GPL-3.0-only
+
 import json
 from pathlib import Path
 import sys

@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Cyberalien
+# SPDX-License-Identifier: GPL-3.0-only
+
 """Real provider/Core/MCP smoke check; uses the existing Codex CLI account."""
 import argparse
 import asyncio

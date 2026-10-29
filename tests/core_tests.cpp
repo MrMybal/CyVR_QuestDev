@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Cyberalien
+// SPDX-License-Identifier: GPL-3.0-only
+
 #include "quest/backend.hpp"
 #include "quest/plugins.hpp"
 #include <filesystem>

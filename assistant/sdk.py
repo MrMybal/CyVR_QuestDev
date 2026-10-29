@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Cyberalien
+# SPDX-License-Identifier: GPL-3.0-only
+
 """Small native-app SDK using the official CyToolsCore HTTP client."""
 import time
 from cytools_core import CyToolError

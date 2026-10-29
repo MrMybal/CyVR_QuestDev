@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Cyberalien
+# SPDX-License-Identifier: GPL-3.0-only
+
 """Download a Quest file and preserve the Core export after closing its task."""
 from pathlib import Path
 import argparse

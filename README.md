@@ -2,6 +2,8 @@
 
 Outils de développement pour Meta Quest, en C++17, Win32 et DirectX 11, avec l’interface **CyUI / CyImgui_Interface**.
 
+Copyright © 2026 Cyberalien. Projet sous **GNU GPLv3 uniquement** (`GPL-3.0-only`) : [licence intégrale](LICENSE), [copyright et périmètre](COPYRIGHT). Les composants tiers conservent leurs propres licences, recensées dans [THIRD_PARTY.md](THIRD_PARTY.md).
+
 Neuf espaces possèdent leur propre navigation : **Console, Applications, Réglages, Appareil, ADB, Plugins, Assistant IA, Fichiers et Métriques**. Une application conserve sa propre vue de logs, ses sous-processus et son historique, indépendamment des autres applications du casque.
 
 ![Console par application](docs/images/console.png)

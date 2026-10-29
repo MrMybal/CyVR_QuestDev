@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Cyberalien
+# SPDX-License-Identifier: GPL-3.0-only
+
 param([switch]$Test, [switch]$Run, [switch]$Clean, [string]$CyUIRoot = $env:CYUI_ROOT)
 $ErrorActionPreference = 'Stop'
 $questBuildArgs = @("$PSScriptRoot\tools\build.py")

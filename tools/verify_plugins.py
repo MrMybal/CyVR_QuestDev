@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Cyberalien
+# SPDX-License-Identifier: GPL-3.0-only
+
 """Native UI + actual Core HTTP/MCP plugin integration, without an AI provider.
 
 --live reads the installed services. It never applies HUD settings or captures GPU

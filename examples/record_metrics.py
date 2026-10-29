@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Cyberalien
+# SPDX-License-Identifier: GPL-3.0-only
+
 """Record OVR CSVs and preserve the Core job before its task is closed."""
 import argparse
 from pathlib import Path

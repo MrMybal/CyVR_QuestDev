@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Cyberalien
+# SPDX-License-Identifier: GPL-3.0-only
+
 """CLI / official MCP bridge to the running QuestDev CyToolsCore service."""
 import argparse
 import asyncio

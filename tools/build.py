@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Cyberalien
+# SPDX-License-Identifier: GPL-3.0-only
+
 """Build the native app with the Visual Studio toolchain and CMake/Ninja."""
 import argparse
 import os

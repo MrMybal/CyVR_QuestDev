@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Cyberalien
+# SPDX-License-Identifier: GPL-3.0-only
+
 """Capture-only smoke check on the selected Quest; no device settings changed."""
 import argparse
 from concurrent.futures import ThreadPoolExecutor

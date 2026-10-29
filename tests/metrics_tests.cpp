@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Cyberalien
+// SPDX-License-Identifier: GPL-3.0-only
+
 #include "quest/metrics_capture.hpp"
 #include "quest/metrics_plugins.hpp"
 #define WIN32_LEAN_AND_MEAN

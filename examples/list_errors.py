@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Cyberalien
+# SPDX-License-Identifier: GPL-3.0-only
+
 """Run with runtime/python/Scripts/python.exe while QuestDev is open."""
 from pathlib import Path
 import json

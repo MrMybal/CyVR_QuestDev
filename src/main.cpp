@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Cyberalien
+// SPDX-License-Identifier: GPL-3.0-only
+
 // Win32 / DirectX 11 host, adapted from the CyUI and Dear ImGui examples.
 // See THIRD_PARTY.md for dependency notices.
 

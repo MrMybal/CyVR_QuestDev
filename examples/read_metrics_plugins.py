@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Cyberalien
+# SPDX-License-Identifier: GPL-3.0-only
+
 """Read both installed metrics services through the native QuestDev SDK."""
 from pathlib import Path
 import json

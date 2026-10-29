@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Cyberalien
+// SPDX-License-Identifier: GPL-3.0-only
+
 #include "quest/metrics_data.hpp"
 #include "quest/core.hpp"
 #include <algorithm>

@@ -1,5 +1,7 @@
 # Dépendances
 
+Le code original de CyVR QuestDev est sous **GNU GPLv3 uniquement** (`GPL-3.0-only`), copyright 2026 Cyberalien. Voir [LICENSE](LICENSE) et [COPYRIGHT](COPYRIGHT). Les notices ci-dessous précisent les licences propres aux composants tiers ; elles sont conservées lors de leur distribution.
+
 ## CyUI / CyImgui_Interface
 
 Bibliothèque de widgets et thèmes, liée depuis le dossier indiqué par `CYUI_ROOT` ou détecté près du projet. Licence MIT, copyright 2026 Cyberalien. Le code d’hébergement Win32/DX11 est adapté de son exemple. Notice complète : [licenses/CyUI.txt](licenses/CyUI.txt).

@@ -1,0 +1,17 @@
+CyVR QuestDev
+Copyright (c) 2026 Cyberalien
+SPDX-License-Identifier: GPL-3.0-only
+
+The original CyVR QuestDev source code, build scripts, plugin manifests,
+examples and documentation are licensed under the GNU General Public License,
+version 3 only. You may redistribute and/or modify them under that license.
+See LICENSE for the complete license text.
+
+This program is distributed in the hope that it will be useful, but WITHOUT
+ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+Third-party components retain their own copyright notices and licenses.
+In particular, assistant/providers, third_party/json.hpp and the CyToolsCore
+wheel are covered by the licenses identified in THIRD_PARTY.md, LICENCES/
+and licenses/. Their notices are preserved; this notice does not replace them.

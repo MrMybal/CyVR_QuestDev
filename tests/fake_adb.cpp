@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Cyberalien
+// SPDX-License-Identifier: GPL-3.0-only
+
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <fcntl.h>

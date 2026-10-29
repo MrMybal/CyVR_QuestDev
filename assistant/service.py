@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Cyberalien
+# SPDX-License-Identifier: GPL-3.0-only
+
 """QuestDev-owned companion: CyToolsCore runtime, IPC host and provider sessions."""
 import argparse
 import copy

@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Cyberalien
+# SPDX-License-Identifier: GPL-3.0-only
+
 $ErrorActionPreference = 'Stop'
 $questProductRoot = Split-Path $PSScriptRoot
 if (-not (Test-Path "$PSScriptRoot\python\Scripts\python.exe")) { & python -m venv "$PSScriptRoot\python" }

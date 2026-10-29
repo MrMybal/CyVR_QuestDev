@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Cyberalien
+# SPDX-License-Identifier: GPL-3.0-only
+
 """Local native/Core integration on a connected Quest; sends no data to an AI."""
 import json
 import os

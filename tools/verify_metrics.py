@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Cyberalien
+# SPDX-License-Identifier: GPL-3.0-only
+
 """Native metrics + official Core SDK/MCP integration with growing ADB fixtures.
 
 Requires no other QuestDev instance. No AI provider or physical device is used.

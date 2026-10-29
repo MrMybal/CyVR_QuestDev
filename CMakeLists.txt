@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Cyberalien
+# SPDX-License-Identifier: GPL-3.0-only
+
 cmake_minimum_required(VERSION 3.20)
 project(CyVR_QuestDev VERSION 0.5.0 LANGUAGES CXX)
 # CMake can misdecode French MSVC's UTF-8 /showIncludes prefix as OEM text.
@@ -40,6 +43,14 @@ add_executable(CyVR_QuestDev WIN32 src/main.cpp src/app.cpp src/preview.cpp src/
 target_include_directories(CyVR_QuestDev PRIVATE "${IMGUI_DIR}/backends" third_party)
 target_link_libraries(CyVR_QuestDev PRIVATE quest_backend CyUI::CyUI d3d11 dxgi d3dcompiler dwmapi shell32 comdlg32 ole32 windowscodecs)
 add_custom_command(TARGET CyVR_QuestDev POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/plugins" "$<TARGET_FILE_DIR:CyVR_QuestDev>/plugins")
+set_property(TARGET CyVR_QuestDev APPEND PROPERTY LINK_DEPENDS
+    "${CMAKE_SOURCE_DIR}/LICENSE" "${CMAKE_SOURCE_DIR}/COPYRIGHT" "${CMAKE_SOURCE_DIR}/THIRD_PARTY.md")
+add_custom_command(TARGET CyVR_QuestDev POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/LICENSE" "$<TARGET_FILE_DIR:CyVR_QuestDev>/LICENSE.txt"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/COPYRIGHT" "$<TARGET_FILE_DIR:CyVR_QuestDev>/COPYRIGHT.txt"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/THIRD_PARTY.md" "$<TARGET_FILE_DIR:CyVR_QuestDev>/THIRD_PARTY.md"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/LICENCES" "$<TARGET_FILE_DIR:CyVR_QuestDev>/LICENCES"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/licenses" "$<TARGET_FILE_DIR:CyVR_QuestDev>/licenses")
 target_compile_definitions(CyVR_QuestDev PRIVATE UNICODE _UNICODE NOMINMAX)
 if(MSVC)
     foreach(target quest_core quest_backend CyVR_QuestDev)
