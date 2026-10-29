@@ -32,7 +32,9 @@ La bibliothèque portable dans `assistant/providers` provient du module MIT `Bri
 
 ## Python / MCP
 
-Le runtime privé installe les dépendances de la roue CyToolsCore et le SDK MCP officiel. Versions : [runtime/requirements.lock](runtime/requirements.lock). Notices et licences récupérées dans les distributions installées : [LICENCES/Python-dependencies.txt](LICENCES/Python-dependencies.txt). Python de base et CLI des fournisseurs restent des dépendances externes installées par l’utilisateur.
+Le runtime privé installe les dépendances de la roue CyToolsCore et le SDK MCP officiel. Versions : [runtime/requirements.lock](runtime/requirements.lock). Notices et licences récupérées dans les distributions installées : [LICENCES/Python-dependencies.txt](LICENCES/Python-dependencies.txt). Dans le dépôt de développement, Python de base et les CLI des fournisseurs restent des dépendances externes installées par l’utilisateur.
+
+Les archives Alpha Windows embarquent Python 3.13.17, distribution officielle sous licences PSF et notices associées, conservées dans `runtime/python/Scripts/LICENSE.txt`. Les licences des distributions Python restent également présentes dans leurs métadonnées. Le runtime C++ de l’application native est lié statiquement.
 
 Les commandes HUD/CSV suivent la [documentation officielle OVR Metrics](https://developers.meta.com/vr/documentation/native/android/ts-ovrmetricstool/). Aucun APK Meta, binaire MQDH ou code propriétaire de MQDH n’est distribué.
 

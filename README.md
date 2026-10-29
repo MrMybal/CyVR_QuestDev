@@ -12,6 +12,8 @@ Neuf espaces possèdent leur propre navigation : **Console, Applications, Régla
 
 ## Démarrer
 
+Pour une archive **Alpha Windows x64**, extraire tout le ZIP de la release puis lancer `CyVR_QuestDev.exe`. Python et CyToolsCore sont embarqués ; ADB reste externe. Voir [les archives et leur préparation](docs/RELEASE.md).
+
 Lancer `build/windows/CyVR_QuestDev.exe`. L’application détecte ADB dans le dossier de l’exécutable, le SDK Android ou le PATH. Le chemin peut être changé dans **Réglages**.
 
 Brancher un Quest avec le mode développeur actif, puis accepter le débogage USB dans le casque. Si un seul appareil autorisé est présent, la connexion est automatique. Avec plusieurs appareils, choisir celui à observer dans la liste en haut.

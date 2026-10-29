@@ -911,7 +911,7 @@ struct App::Impl {
         cyui::badge(assistantReady?"MCP / SDK ACTIF":options.demo?"DÉMONSTRATION":"RUNTIME HORS LIGNE",assistantReady?cyui::Tone::success:cyui::Tone::neutral);ImGui::SameLine();cyui::textDim("%s",assistantStatus.c_str());
         if(!assistantReady){
             {cyui::ScopedDisabled disabled(options.demo||assistant->running());if(cyui::primaryButton("Démarrer MCP / SDK"))startAssistant();}
-            ImGui::SameLine();if(cyui::button("Installer / réparer le runtime")){auto script=productRoot()/L"runtime/setup.ps1";auto args=L"-NoProfile -ExecutionPolicy Bypass -File \""+script.wstring()+L"\"";ShellExecuteW(nullptr,L"open",L"powershell.exe",args.c_str(),productRoot().c_str(),SW_SHOWNORMAL);}
+            auto script=productRoot()/L"runtime/setup.ps1";if(isFile(script.wstring())){ImGui::SameLine();if(cyui::button("Installer / réparer le runtime")){auto args=L"-NoProfile -ExecutionPolicy Bypass -File \""+script.wstring()+L"\"";ShellExecuteW(nullptr,L"open",L"powershell.exe",args.c_str(),productRoot().c_str(),SW_SHOWNORMAL);}}
         }
         if(ImGui::CollapsingHeader("Connexion IA et modèle",assistantConnected?0:ImGuiTreeNodeFlags_DefaultOpen)){
             const char* names[]={"Codex · compte CLI","Claude Code · compte CLI","Ollama · serveur local","OpenRouter · API","Claude · API","OpenCode · CLI","Antigravity · CLI"};

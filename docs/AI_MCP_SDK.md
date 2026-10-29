@@ -95,6 +95,6 @@ Les opérations de fichiers utilisent le même code que la vue native. `list_fil
 .\runtime\python\Scripts\python.exe tools\verify_native.py --fake
 ```
 
-Le compagnon conserve ses diagnostics dans `%LOCALAPPDATA%/CyVR/QuestDev/assistant/runtime-errors.log`. Les versions vérifiées sont dans `runtime/requirements.lock`. La roue MIT de CyToolsCore est incluse dans `runtime/wheels`. Le Python privé dépend d’un Python de base 3.11+ installé ; il ne s’agit pas d’un Python embarqué autonome.
+Le compagnon conserve ses diagnostics dans `%LOCALAPPDATA%/CyVR/QuestDev/assistant/runtime-errors.log`. Les versions vérifiées sont dans `runtime/requirements.lock`. La roue MIT de CyToolsCore est incluse dans `runtime/wheels`. Dans le dépôt de développement, le Python privé dépend d’un Python de base 3.11+ installé. Les [archives Alpha](RELEASE.md) embarquent un Python autonome.
 
 Références : [CyToolsCore](https://github.com/MrMybal/CyToolsCore), [Codex app-server](https://developers.openai.com/codex/app-server/). L’intégration Codex utilise `dynamicTools` et `item/tool/call`.
