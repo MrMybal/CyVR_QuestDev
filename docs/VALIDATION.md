@@ -1,5 +1,18 @@
 # Validation
 
+## Version 0.6 — mirroring vidéo/audio
+
+Validation du 30 octobre 2026, build Release Windows x64.
+
+- **178 contrôles C++** réussis, dont 29 consacrés au mirroring : paramètres, audio, recadrage, chemin MKV Unicode, protection contre remplacement, environnement ADB enfant, acquittement après texture/fenêtre, erreur encodeur, annulation du démarrage, arrêt et fermeture avec finalisation.
+- **14 tests Python** sur le vrai Core, dont permission du mirroring, bornes vidéo/audio et refus des paramètres étrangers.
+- **42 rendus UI** réussis, dont le panneau de mirroring dans les cinq thèmes ; inspection navy et light-grey.
+- Vérification native Core/SDK et 38 outils MCP : import, lecture et export métriques, suivi CSV et confirmation/annulation des actions.
+- **Quest 3 réel** : flux H.264 à **1600 × 864, environ 60 FPS**, décodage matériel Direct3D 11, piste AAC présente dans le MKV et fichier finalisé après arrêt. Aucun jeu lancé et aucun changement des réglages réseau/alimentation pendant ce test. Le test confirme la présence de la piste audio ; il ne mesure pas sa qualité audible ni sa disponibilité dans chaque application.
+
+Reproduire : `python tools/build.py --test`, tests Python, `python tools/verify_ui.py`, puis `runtime/python/Scripts/python.exe tools/verify_metrics.py`. Le test matériel facultatif est décrit dans [MIRRORING.md](MIRRORING.md). Les rendus et essais matériels restent des fichiers locaux exclus du dépôt.
+
+
 ## Version 0.5 — courbes et enregistrements CSV OVR
 
 Validation effectuée le 29 octobre 2026, build Release Win32/DX11.

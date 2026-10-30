@@ -27,6 +27,9 @@ def main():
     environment['LOCALAPPDATA']=str(destination/'profile')
     for key in ['PYTHONPATH','PYTHONHOME','VIRTUAL_ENV','ANDROID_HOME','ANDROID_SDK_ROOT','QUESTDEV_CONNECTION']:
         environment.pop(key,None)
+    video=subprocess.run([str(product/'runtime/mirror/scrcpy.exe'),'--version'],cwd=product,env=environment,capture_output=True,text=True,check=True,timeout=10)
+    assert 'scrcpy 5.0.1' in video.stdout,video.stdout
+    assert (product/'runtime/mirror/scrcpy-server').is_file()
     csv=destination/'fixture.csv';csv.write_text('Time Stamp,average_frame_rate,custom\n1000,90,\n1100,88,-2\n',encoding='utf8')
     screenshot=destination/'metrics.bmp'
     command=[str(product/'CyVR_QuestDev.exe'),'--adb',str(ROOT/'build/windows/fake_adb.exe'),'--metrics-csv',str(csv),'--page','8','--capture',str(screenshot),'--capture-after-ms','15000']
@@ -51,6 +54,20 @@ assert Path(sys.prefix).is_relative_to(product)
 with QuestDevClient(connection) as client:
     assert len(client.describe()['operations'])==17
     context=client.invoke('get_context')['context'];assert context['selectedDevice']=='FAKE-QUEST'
+    assert context['mirroring']['active'] is False and context['mirroring']['window']=='dedicated_native_video'
+    pending=client.client.call('SubmitJob',sessionId=client.session,operationId='device_action',parameters={'action':'mirror_start','mirror':{'maxSize':1600,'audio':'off'}})
+    await_id=pending['jobId']
+    import time
+    time.sleep(.3)
+    pending=client.client.call('GetJob',jobId=await_id)
+    assert pending['state'] not in {'Completed','Failed','Cancelled'},pending
+    client.client.call('CancelJob',jobId=await_id)
+    for _ in range(100):
+        pending=client.client.call('GetJob',jobId=await_id)
+        if pending['state'] in {'Completed','Failed','Cancelled'}:break
+        time.sleep(.05)
+    assert pending['state']=='Cancelled',pending
+    assert not client.invoke('get_context')['context']['mirroring']['active']
     values=client.invoke('read_metrics',{'limit':2})
     assert values['rows']==2 and values['samples'][0]['values']['custom'] is None,values
     job=client.run('metrics_action',{'action':'export_csv'})

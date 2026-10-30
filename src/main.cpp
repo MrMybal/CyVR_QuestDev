@@ -205,6 +205,8 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
         else if (arg == L"--package") options.package = quest::narrow(next());
         else if (arg == L"--plugin") options.plugin = quest::narrow(next());
         else if (arg == L"--metrics-csv") options.metricsCsv = next();
+        else if (arg == L"--scrcpy") options.scrcpy = next();
+        else if (arg == L"--mirror-settings") options.mirrorSetup = true;
         else if (arg == L"--plugin-tab") options.pluginTab = std::clamp(_wtoi(next().c_str()),0,2);
         else if (arg == L"--page") options.page = _wtoi(next().c_str());
         else if (arg == L"--frames") captureFrames = std::max(20, _wtoi(next().c_str()));

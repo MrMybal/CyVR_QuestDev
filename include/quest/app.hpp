@@ -6,7 +6,7 @@
 #include <memory>
 
 namespace quest {
-struct Options { bool demo{},compare{}; int page{},pluginTab{}; std::wstring adb,metricsCsv; std::string package,plugin;void* graphicsDevice{}; };
+struct Options { bool demo{},compare{},mirrorSetup{}; int page{},pluginTab{}; std::wstring adb,metricsCsv,scrcpy; std::string package,plugin;void* graphicsDevice{}; };
 class App {
 public:
     explicit App(Options options);

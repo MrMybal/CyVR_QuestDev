@@ -37,7 +37,7 @@ Le backend accepte huit jobs ADB concurrents, indépendants de Logcat, avec sess
 
 Les captures CyInsightOVR complètes restent séparées des résumés du contexte IA. Les exports SDK sont écrits dans `context.path('outputs/capture.cyovr')`, sous la propriété du job Core. `capture_id` distingue acceptation, attente et réception du résultat ; aucune mesure n’est déduite d’une simple acceptation. Le contexte UI ne conserve pas les chemins temporaires des jobs.
 
-`assistant_bridge.cpp` lance le Python privé, deux pipes NDJSON UTF-8 et un Job Object Windows pour les enfants. Le compagnon `assistant/service.py` utilise le vrai runtime CyToolsCore et ses adaptateurs HTTP/MCP. Le contrat commun décrit quatorze opérations, leurs schémas et permissions. Le contexte est actualisé chaque seconde. Les lectures natives rejoignent le thread UI ; les actions utilisent les jobs ADB et la politique d’autorisation commune à IA/MCP/SDK.
+`assistant_bridge.cpp` lance le Python privé, deux pipes NDJSON UTF-8 et un Job Object Windows pour les enfants. Le compagnon `assistant/service.py` utilise le vrai runtime CyToolsCore et ses adaptateurs HTTP/MCP. Le contrat commun décrit dix-sept opérations, leurs schémas et permissions. Le contexte est actualisé chaque seconde. Les lectures natives rejoignent le thread UI ; les actions utilisent les jobs ADB et la politique d’autorisation commune à IA/MCP/SDK.
 
 `files.cpp` normalise les chemins Android, construit les commandes et décode les listes délimitées par NUL. Noms et métadonnées restent séparés, y compris avec espaces, accents et retours à la ligne. La liste binaire utilise un fichier de job ; elle est bornée à 5 000 entrées et paginée pour le MCP. Les racines protégées et réponses incomplètes sont refusées.
 
@@ -46,3 +46,9 @@ Les envois utilisent un temporaire unique puis un renommage sans remplacement pa
 Le changement d’appareil invalide les demandes de l’ancienne session. Une annulation garde le handler Core actif jusqu’à l’acquittement natif. Les workers ADB sont arrêtés avant le compagnon à la fermeture. Les fichiers utilisent `context.path` et les espaces privés Core. Le MCP ouvre une tâche temporaire par connexion ; le SDK adapte le client HTTP officiel. L’assistant et le client externe possèdent des acteurs distincts ; les clients SDK partageant le même jeton restent un principal unique.
 
 Codex utilise app-server et les outils dynamiques. Les autres transports proposent actuellement du texte contextualisé. Les clés de session ne sont pas sauvegardées dans le profil. Le fichier de connexion local est protégé par les ACL du dossier et son jeton n’est pas copié dans la configuration MCP.
+
+## Mirroring vidéo
+
+`mirroring.cpp` supervise un processus scrcpy dédié avec un Job Object Windows, un environnement enfant contenant l’ADB choisi et une sortie bornée à 64 Ko. Le moteur reçoit le numéro de série et les arguments de qualité individuellement échappés. Les images et le son restent dans sa fenêtre native ; le thread ImGui ne décode pas de PNG à cadence vidéo. La lecture PNG de `preview.cpp` reste réservée aux captures explicites.
+
+La réception des dimensions de texture et l’existence de la fenêtre vidéo acquittent le démarrage. L’arrêt envoie WM_CLOSE pour finaliser le MKV et attend la sortie du processus avant de répondre ; après cinq secondes de blocage, l’arrêt forcé est signalé. Les annulations du démarrage, la déconnexion, le changement de casque et la fermeture utilisent le même cycle. Les résultats Core restent rattachés à la session d’appareil.

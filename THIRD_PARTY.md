@@ -39,3 +39,9 @@ Les archives Alpha Windows embarquent Python 3.13.17, distribution officielle so
 Les commandes HUD/CSV suivent la [documentation officielle OVR Metrics](https://developers.meta.com/vr/documentation/native/android/ts-ovrmetricstool/). Aucun APK Meta, binaire MQDH ou code propriétaire de MQDH n’est distribué.
 
 Le plugin CyInsightOVR implémente l’interopérabilité avec le protocole de l’application `org.cyinsights.ovr`. La distribution CyInsightOVR (AGPL-3.0-or-later) reste externe : aucun APK, JAR ou code Java du collecteur n’est embarqué dans QuestDev. L’utilisateur sélectionne son JAR officiel pour l’initialisation sur le casque.
+
+## Mirroring scrcpy
+
+Le runtime officiel [scrcpy 5.0.1](https://github.com/Genymobile/scrcpy/tree/v5.0.1), copyright Genymobile et contributeurs, est distribué sans modification dans les archives Windows. Il conserve sa licence [Apache-2.0](LICENCES/scrcpy-Apache-2.0.txt). Les DLL officielles utilisent FFmpeg 9.0.2 (LGPL-2.1-or-later), SDL 3.4.18 (zlib), libusb 1.0.30 (LGPL-2.1-or-later) et dav1d 1.5.4 (BSD). Notices intégrales : [FFmpeg](LICENCES/FFmpeg-LGPL-2.1.txt), [SDL](LICENCES/SDL-zlib.txt), [libusb](LICENCES/libusb-LGPL-2.1.txt), [dav1d](LICENCES/dav1d-BSD.txt), [zlib](LICENCES/zlib.txt) (compression utilisée par FFmpeg, [notice officielle](https://zlib.net/zlib_license.html)).
+
+Leurs archives sources correspondantes, incluant les scripts de compilation du dépôt scrcpy, accompagnent le code source de la même release. Les empreintes et origines sont épinglées dans `tools/setup_mirroring.py` et conservées dans `runtime/mirror/origins.json`. Les bibliothèques LGPL sont chargées dynamiquement et peuvent être remplacées par des versions compatibles. Aucun exécutable ADB provenant du ZIP scrcpy n’est redistribué.

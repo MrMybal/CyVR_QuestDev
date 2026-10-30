@@ -6,6 +6,8 @@ imgui.ini
 __pycache__/
 /runtime/python/
 /runtime/backups/
+/runtime/mirror/
+/runtime/mirror-sources/
 /runtime/*.txt
 /assistant/.data/
 /.local/

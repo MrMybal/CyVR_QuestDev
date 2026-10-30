@@ -12,9 +12,10 @@ import subprocess
 import sys
 from urllib.request import urlopen
 import zipfile
+from setup_mirroring import validate as validate_mirroring, RUNTIME_FILES, SOURCES
 
 ROOT=Path(__file__).resolve().parents[1]
-VERSION='0.5.0-alpha.1'
+VERSION='0.6.0-alpha.1'
 PYTHON_VERSION='3.13.17'
 PYTHON_URL=f'https://www.python.org/ftp/python/{PYTHON_VERSION}/python-{PYTHON_VERSION}-embeddable-amd64.zip'
 PYTHON_SHA256='0ba1ee4bfcbdc3a559d27e2e9ce76d04a7839947a23f46375872c755c0d463b8'
@@ -84,6 +85,7 @@ def prepare_runtime(destination,cache):
 
 
 def package(output,cyui):
+    validate_mirroring()
     if output.exists():raise RuntimeError('Use a new output directory; existing packages are preserved')
     output.mkdir(parents=True)
     tracked=[p for p in git('ls-files','-z').decode().split('\0') if p]
@@ -95,6 +97,7 @@ def package(output,cyui):
         if include:copy(ROOT/name,product/name)
     for source,target in [('LICENSE','LICENSE.txt'),('COPYRIGHT','COPYRIGHT.txt')]:copy(ROOT/source,product/target)
     prepare_runtime(product,ROOT/'build/release-cache')
+    for name in sorted(RUNTIME_FILES|{'origins.json'}):copy(ROOT/'runtime/mirror'/name,product/'runtime/mirror'/name)
     (product/'DEMARRER.txt').write_text(
         f'CyVR QuestDev {VERSION} — ALPHA\n\n'
         'Windows 10/11 x64. Extraire toute cette archive dans un dossier, puis lancer CyVR_QuestDev.exe.\n'
@@ -103,12 +106,16 @@ def package(output,cyui):
         'Activer le mode développeur du Quest et accepter le débogage USB dans le casque.\n'
         'Assistant IA : choisir un fournisseur et se connecter explicitement. Les CLI des fournisseurs restent externes.\n'
         'OVR Metrics / CyInsightOVR : installer leurs distributions officielles sur le casque.\n\n'
+        'Mirroring : Appareil → Mirroring vidéo / audio → Démarrer le mirroring. Moteur scrcpy inclus.\n'
+        'Réglages vidéo/audio, F11 plein écran, enregistrement MKV facultatif.\n\n'
         'Version Alpha : voir docs/VALIDATION.md et docs/METRICS.md pour les limites connues.\n'
         'Code source correspondant : archive Source de la même release. Licence GPLv3, notices tierces incluses.\n',encoding='utf8')
     manifest={'version':VERSION,'channel':'alpha','commit':commit,'python':PYTHON_VERSION,'platform':'Windows x64'}
     (product/'RELEASE.json').write_text(json.dumps(manifest,indent=2),encoding='utf8')
     source=output/f'CyVR_QuestDev-{VERSION}-Source';source.mkdir()
     for name in tracked:copy(ROOT/name,source/'CyVR_QuestDev'/name)
+    for name in [item['file'] for item in SOURCES]+['origins.json']:
+        copy(ROOT/'runtime/mirror-sources'/name,source/'CyVR_QuestDev/runtime/mirror-sources'/name)
     # Exact CyUI/ImGui source inputs needed to rebuild the statically linked host.
     ui_files=[cyui/'CMakeLists.txt',cyui/'LICENSE',cyui/'README.md']
     for directory in ['include','src']:

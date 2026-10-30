@@ -1,4 +1,4 @@
-# CyVR QuestDev 0.5
+# CyVR QuestDev 0.6
 
 Outils de développement pour Meta Quest, en C++17, Win32 et DirectX 11, avec l’interface **CyUI / CyImgui_Interface**.
 
@@ -23,7 +23,7 @@ Dans **Console**, la colonne de gauche propose **Actives**, **Installées** et *
 ## Fonctions disponibles
 
 - Navigation latérale adaptée à chaque page ; le gestionnaire d’applications possède ses propres catégories et sa propre recherche.
-- **Device Actions** : aperçu du casque par captures, PNG, vidéo MP4 avec arrêt anticipé, navigateur, GPU profiling, Perfetto, HUD et enregistrement CSV OVR Metrics, récupération des CSV, Wi-Fi ADB, proximité, Boundary, veille/réveil et redémarrage.
+- **Device Actions** : mirroring H.264 avec audio PC, fenêtre vidéo, plein écran, qualité réglable, recadrage et enregistrement MKV ; PNG, vidéo MP4 avec arrêt anticipé, navigateur, GPU profiling, Perfetto, HUD et enregistrement CSV OVR Metrics, récupération des CSV, Wi-Fi ADB, proximité, Boundary, veille/réveil et redémarrage. [Guide du mirroring](docs/MIRRORING.md).
 - **ADB** : shell Android ou arguments ADB, sortie progressive, délai maximal, tâches concurrentes, annulation, historique et export.
 - **Plugins** : OVR Metrics et CyInsightOVR configurables directement dans QuestDev, profils locaux, métriques/graphiques, placement du HUD, CSV, connexion au collecteur et captures GPU `.cyovr`. Manifestes `.cyplugin`, actions Android et tunnels TCP ADB forward/reverse. [Guide](docs/PLUGINS.md).
 - **Fichiers** : navigation dans le stockage, raccourcis par application, filtres, métadonnées, envoi/récupération, création de dossiers, renommage et suppression de fichiers ou de dossiers vides. Transferts en arrière-plan, annulation et remplacement explicite.
@@ -70,6 +70,8 @@ Prérequis : Windows 10/11 x64, Visual Studio 2022 avec les outils C++, CMake/Ni
 # Installer / réparer le Python privé de l’assistant :
 .\runtime\setup.ps1
 .\runtime\python\Scripts\python.exe -m unittest discover -s assistant/tests -v
+# Installer le moteur officiel du mirroring et ses sources correspondantes :
+python tools/setup_mirroring.py
 ```
 
 Les tests utilisent un faux exécutable ADB pour contrôler l’attribution, les redémarrages, la réutilisation de PID, les filtres, les limites mémoire, l’échappement JSON et les commandes du backend.
@@ -102,7 +104,7 @@ Le contexte contient l’appareil, les applications, les filtres, les plugins, l
 
 La capture commence à la connexion, en direct. Elle ne réattribue pas l’ancien tampon du casque à des PID actuels. Après une interruption, la nouvelle capture repart au présent ; les messages émis pendant l’interruption peuvent manquer. Une origine manquante dans les événements ou un nom de processus personnalisé non rattachable à un package reste non attribué. Les messages de crash émis par un processus système restent accessibles dans la vue globale et la vue système.
 
-L’aperçu utilise `screencap`, avec une fréquence limitée et sans audio. La vidéo est limitée à 180 secondes et Perfetto à 120 secondes. Le HUD/CSV nécessite OVR Metrics installé ; son APK n’est pas redistribué. Un tunnel de plugin nécessite un vrai service TCP dans l’application cible. Les réglages VR dépendent du firmware et leur sortie est consultable dans ADB.
+Le mirroring utilise scrcpy dans une fenêtre vidéo dédiée. Sa cadence dépend du casque, de l’application et de la liaison USB/Wi-Fi ; la duplication audio nécessite Android 13+ et peut être refusée par certaines apps. L’enregistrement du flux MKV continue jusqu’à l’arrêt du mirroring, sans limite de 180 secondes. La commande indépendante de vidéo Android MP4 reste limitée à 180 secondes et Perfetto à 120 secondes. Le HUD/CSV nécessite OVR Metrics installé ; son APK n’est pas redistribué. Un tunnel de plugin nécessite un vrai service TCP dans l’application cible. Les réglages VR dépendent du firmware et leur sortie est consultable dans ADB.
 
 Les transferts concernent les fichiers réguliers. Les copies de dossiers, suppressions récursives, accès root, déploiements de bundles APK et outils Meta de simulation réseau/multijoueur ne sont pas implémentés. Cette version n’annonce pas une parité complète avec MQDH.
 

@@ -8,6 +8,7 @@
 #include "quest/files.hpp"
 #include "quest/metrics_plugins.hpp"
 #include "quest/metrics_view.hpp"
+#include "quest/mirroring.hpp"
 #include <cyui/CyUI.h>
 #include <imgui.h>
 #define WIN32_LEAN_AND_MEAN
@@ -105,8 +106,14 @@ struct App::Impl {
     std::array<char,8192> command{};
     std::map<uint64_t,Task> tasks;
     std::vector<uint64_t> taskOrder;
-    uint64_t selectedTask{},mirrorTask{},infoTask{},recordTask{};
+    uint64_t selectedTask{},infoTask{},recordTask{};
     std::unique_ptr<Preview> preview;
+    std::unique_ptr<Mirroring> videoMirror;
+    MirrorOptions mirrorDraft;
+    bool mirrorSetup{},mirrorCrop{};
+    std::wstring mirrorEngine;
+    std::vector<MirrorTicket> mirrorUi;
+    std::map<std::string,std::pair<MirrorTicket,uint64_t>> nativeMirrors;
     std::map<std::string,std::string> deviceInfo;
     std::vector<Plugin> plugins;
     std::map<std::string,bool> pluginLinked;
@@ -116,13 +123,13 @@ struct App::Impl {
     std::unique_ptr<MetricsView> metrics;
     std::map<std::string,std::pair<MetricsTicket,uint64_t>> nativeMetrics;
     bool pluginTabRequest{true};
-    bool mirror{},newPlugin{},confirmDevice{};
+    bool newPlugin{},confirmDevice{};
     std::string confirmationText;
     JobRequest confirmationJob;
     std::array<char,128> pluginName{},pluginPackage{};
     int pluginLocalPort{8787},pluginRemotePort{8787},recordSeconds{30},traceSeconds{10};
     std::string recordRemote,recordPid;
-    std::chrono::steady_clock::time_point nextMirror{},nextInfo{};
+    std::chrono::steady_clock::time_point nextInfo{};
     std::unique_ptr<AssistantBridge> assistant;
     std::string assistantStatus="Non démarré",mcpConfig,connectionFile;
     bool assistantReady{},assistantConnected{},assistantBusy{},sendContext{true},sendLogs{true},floatingAssistant{};
@@ -157,6 +164,8 @@ struct App::Impl {
         }
         auto a=narrow(adb);strncpy_s(adbField.data(),adbField.size(),a.c_str(),_TRUNCATE);
         preview=std::make_unique<Preview>(options.graphicsDevice);reloadPlugins();
+        videoMirror=std::make_unique<Mirroring>();mirrorSetup=options.mirrorSetup;
+        mirrorEngine=options.scrcpy.empty()?(productRoot()/L"runtime/mirror/scrcpy.exe").wstring():options.scrcpy;
         metrics=std::make_unique<MetricsView>(userRoot(),options.demo);
         if(!options.metricsCsv.empty())metrics->capture().request("open_csv",options.metricsCsv);
         for(size_t i=0;i<plugins.size();++i)if(plugins[i].id==options.plugin)selectedPlugin=int(i);
@@ -165,15 +174,16 @@ struct App::Impl {
         if(options.demo){seedDemo();browseFiles(filesFolder);}
         else if(isFile((productRoot()/L"runtime/python/Scripts/python.exe").wstring()))startAssistant();
     }
-    ~Impl(){metrics.reset();backend.reset();for(const auto& pair:tasks)if(pair.second.kind=="files:list"||pair.second.kind=="files:download"){std::error_code ec;std::filesystem::remove(pair.second.path,ec);}if(assistant)assistant->stop();}
+    ~Impl(){videoMirror.reset();metrics.reset();backend.reset();for(const auto& pair:tasks)if(pair.second.kind=="files:list"||pair.second.kind=="files:download"){std::error_code ec;std::filesystem::remove(pair.second.path,ec);}if(assistant)assistant->stop();}
     void saveSettings() {
         if(options.demo)return;
         std::ofstream out(settingsPath());out<<"theme="<<cyui::currentThemeKey()<<"\nadb="<<narrow(adb)<<"\n";
         if(!out)cyui::notify("Impossible de sauvegarder les réglages.",cyui::Tone::error);
     }
     void selectDevice(const std::string& s) {
+        if(videoMirror->state().active)mirrorUi.push_back(videoMirror->stop());
         for(auto& [id,panel]:pluginPanels){panel.observed=Json::object();panel.capture=Json::object();panel.requestedCapture.clear();panel.available.clear();panel.error.clear();panel.message.clear();panel.task=0;}
-        serial=s;session=backend->select(s);store.reset();packages.clear();tabs.clear();view=View{};second=View{};detail.reset();deviceInfo.clear();pluginLinked.clear();mirror=false;mirrorTask=infoTask=recordTask=0;filesTask=0;filesSession=~uint64_t(0);filesEntries.clear();selectedFile=-1;filesDialog=false;online=false;capturing=false;status="Connexion au casque…";
+        serial=s;session=backend->select(s);store.reset();packages.clear();tabs.clear();view=View{};second=View{};detail.reset();deviceInfo.clear();pluginLinked.clear();infoTask=recordTask=0;filesTask=0;filesSession=~uint64_t(0);filesEntries.clear();selectedFile=-1;filesDialog=false;online=false;capturing=false;status="Connexion au casque…";
     }
     void seedDemo() {
         devices={{"DEMO-QUEST-3","device","Meta Quest 3"}};serial=devices[0].serial;online=true;capturing=true;status="Démonstration · données simulées";
@@ -190,6 +200,8 @@ struct App::Impl {
         openApp(options.package.empty()?packages[0].name:options.package);view.follow=false;second.package=packages[1].name;
     }
     void tick() {
+        for(auto it=mirrorUi.begin();it!=mirrorUi.end();){if(it->result.wait_for(std::chrono::seconds(0))==std::future_status::ready){auto result=it->result.get();if(!result.ok)cyui::notify(result.error.c_str(),cyui::Tone::error);it=mirrorUi.erase(it);}else ++it;}
+        for(auto it=nativeMirrors.begin();it!=nativeMirrors.end();){if(it->second.first.result.wait_for(std::chrono::seconds(0))==std::future_status::ready){auto result=it->second.first.result.get();if(it->second.second!=session){result.ok=false;result.error="Le casque sélectionné a changé.";}replyNative(it->first,result.ok,result.data,result.error);it=nativeMirrors.erase(it);}else ++it;}
         metrics->capture().device(adb,serial,session,online&&!options.demo);
         for(auto it=nativeMetrics.begin();it!=nativeMetrics.end();){if(it->second.first.result.wait_for(std::chrono::seconds(0))==std::future_status::ready){auto result=it->second.first.result.get();if(it->second.second!=session){result.ok=false;result.error="Le casque sélectionné a changé.";}replyNative(it->first,result.ok,result.data,result.error);it=nativeMetrics.erase(it);}else ++it;}
         tickAssistant();
@@ -222,7 +234,7 @@ struct App::Impl {
         auto now=std::chrono::steady_clock::now();
         if(online&&page==7&&filesSession!=session&&!filesTask)browseFiles(filesFolder);
         if(online && page==3 && !infoTask && now>=nextInfo)refreshDevice();
-        if(online && mirror && !mirrorTask && now>=nextMirror){auto path=userRoot()/L"preview.png";mirrorTask=submit("Aperçu du casque",{{{"exec-out","screencap","-p"},path.wstring()}},"mirror",path.wstring());nextMirror=now+std::chrono::milliseconds(600);}
+        auto video=videoMirror->state();if(video.active&&!video.stopping&&(!online||video.serial!=serial))mirrorUi.push_back(videoMirror->stop());
     }
     void reloadPlugins(){
         if(!pluginRuns.empty()){cyui::notify("Attendez la fin de la commande de plugin avant de recharger.",cyui::Tone::warning);return;}
@@ -242,7 +254,7 @@ struct App::Impl {
     }
     uint64_t submit(const std::string& label,std::vector<CommandStep> steps,const std::string& kind="command",const std::wstring& path={},int timeout=30000,std::vector<CommandStep> cleanup={}) {
         if(!backend)return 0;JobRequest request;request.label=label;request.steps=std::move(steps);request.timeoutMs=timeout;request.cleanupSteps=std::move(cleanup);auto id=backend->submit(std::move(request));
-        tasks[id]={id,label,"",kind,false,false,0,path};taskOrder.push_back(id);if(kind!="mirror"&&kind!="info"){selectedTask=id;}
+        tasks[id]={id,label,"",kind,false,false,0,path};taskOrder.push_back(id);if(kind!="info"){selectedTask=id;}
         while(taskOrder.size()>100){auto at=std::find_if(taskOrder.begin(),taskOrder.end(),[&](uint64_t n){return tasks[n].done;});if(at==taskOrder.end())break;tasks.erase(*at);taskOrder.erase(at);}return id;
     }
     void jobEvent(const BackendEvent& e) {
@@ -258,7 +270,6 @@ struct App::Impl {
             std::error_code ec;std::filesystem::remove(task.path,ec);fileDestinations.erase(e.job);
         }
         if(task.kind=="files:query"&&e.ok){try{auto listing=readListing(task.path);auto& result=nativeOutputs[e.job];Json rows=Json::array();auto offset=result.value("offset",0),limit=result.value("limit",100);size_t bytes=0;for(size_t i=size_t(offset);i<listing.entries.size()&&rows.size()<size_t(limit)&&bytes<250000;++i){const auto& file=listing.entries[i];Json row={{"name",file.name},{"path",remotePath(result.at("path").get<std::string>()+"/"+file.name)},{"type",file.type=='d'?"directory":file.type=='f'?"file":file.type=='l'?"symlink":"other"},{"size",file.size?Json(*file.size):Json(nullptr)},{"modified",file.modified?Json(*file.modified):Json(nullptr)},{"target",file.target}};bytes+=row.dump(-1,' ',false,Json::error_handler_t::replace).size();rows.push_back(std::move(row));}result["nextOffset"]=size_t(offset)+rows.size()<listing.entries.size()?Json(size_t(offset)+rows.size()):Json(nullptr);result["entries"]=rows;result["count"]=listing.entries.size();result["truncated"]=listing.truncated;}catch(const std::exception& error){task.ok=false;task.output+="\n"+std::string(error.what());}}
-        if(task.kind=="mirror") {mirrorTask=0;if(e.ok){std::string error;if(!preview->load(task.path,error)){mirror=false;cyui::notify(error.c_str(),cyui::Tone::error);}}else{mirror=false;cyui::notify("Capture du casque impossible. Détails dans ADB.",cyui::Tone::error);}return;}
         if(task.kind=="info") {
             infoTask=0;nextInfo=std::chrono::steady_clock::now()+std::chrono::seconds(10);
             std::istringstream lines(task.output);std::string line;while(std::getline(lines,line)){auto at=line.find('=');if(at!=std::string::npos && line.rfind("QD_",0)==0)deviceInfo[line.substr(3,at-3)]=trim(line.substr(at+1));}return;
@@ -304,13 +315,15 @@ struct App::Impl {
         }catch(const std::exception& error){filesError=error.what();}
     }
     Json contextSnapshot() {
-        Json context={{"application","CyVR QuestDev"},{"version","0.5.0"},{"session",session},{"selectedDevice",serial},{"online",online},{"capturing",capturing},{"page",page},{"selectedPackage",view.package},{"devices",Json::array()},{"applications",Json::array()},{"plugins",Json::array()},{"recentLogs",Json::array()},{"deviceInfo",deviceInfo}};
+        Json context={{"application","CyVR QuestDev"},{"version","0.6.0"},{"session",session},{"selectedDevice",serial},{"online",online},{"capturing",capturing},{"page",page},{"selectedPackage",view.package},{"devices",Json::array()},{"applications",Json::array()},{"plugins",Json::array()},{"recentLogs",Json::array()},{"deviceInfo",deviceInfo}};
         context["pages"]={{"console",0},{"applications",1},{"settings",2},{"device",3},{"adb",4},{"plugins",5},{"assistant",6},{"files",7},{"metrics",8}};
         context["metrics"]=metrics->describe();
+        context["mirroring"]=videoMirror->describe();
+        context["mirroringUsage"]="Device > Mirroring vidéo / audio starts real H.264 video in a native window. F11 toggles fullscreen. mirror_start/stop device actions await first texture / graceful shutdown. Optional mirror settings: maxSize, maxFps, bitRateMbps, audio=off|duplicate|output, fullscreen. Audio duplication keeps headset playback on Android 13+, but apps may opt out. Native UI can record MKV during the session. Stop on device change/disconnect/app shutdown. Does not start apps, change Wi-Fi mode or kill the shared ADB server.";
         context["metricsUsage"]="Metrics page: open OVR CSV, select columns, shared time zoom/pan/cursor. Refresh reports with metrics_action to discover remote paths; read_metrics returns bounded samples (missing=null), seconds from first CSV timestamp. record_metrics waits for CSV collection/restoration, needs a running VR app, and may return filesSaved=0. Follow cadence depends on OVR file writes. Export Core recordings before FinishTask. UI recordings persist on PC.";
         context["fileBrowser"]={{"directory",filesFolder},{"selected",selectedFile>=0&&selectedFile<int(filesEntries.size())?filesEntries[size_t(selectedFile)].name:""},{"loading",filesTask!=0},{"entries",filesEntries.size()},{"error",filesError.substr(0,1000)}};
         context["consoleFilters"]={{"search",view.search.data()},{"exclude",view.exclude.data()},{"tag",view.tag.data()},{"minimumIndex",view.minimum},{"pid",view.pid},{"paused",view.paused},{"follow",view.follow},{"showProcessEvents",view.events}};
-        context["usage"]={"Files: browse accessible Quest folders, transfer regular files, create/rename entries and delete files or empty directories. No root access or recursive deletion. Core imports upload sources automatically and owns downloaded task files.","Each page has its own sidebar. Select a package in Console to open its retained application log.","Logs are assigned by timestamped PID lifetime and exact package/subprocess name; unknown origins remain system/unassigned. Shared UIDs do not imply shared applications.","The log buffer retains at most 50000 lines / 64 MB. Pausing a view does not stop capture.","Device Actions uses asynchronous ADB jobs; ADB page shows output, history and cancellation. Cast is a screencap preview without audio.","Plugins are validated .cyplugin manifests; an ADB tunnel requires an actual TCP service in the target app.","Core operation files belong to private tasks. Export results before FinishTask deletes temporary files.","Native QuestDev tool calls are available in Codex. Other integrated providers currently receive text context; external AI clients can use the MCP catalogue."};
+        context["usage"]={"Files: browse accessible Quest folders, transfer regular files, create/rename entries and delete files or empty directories. No root access or recursive deletion. Core imports upload sources automatically and owns downloaded task files.","Each page has its own sidebar. Select a package in Console to open its retained application log.","Logs are assigned by timestamped PID lifetime and exact package/subprocess name; unknown origins remain system/unassigned. Shared UIDs do not imply shared applications.","The log buffer retains at most 50000 lines / 64 MB. Pausing a view does not stop capture.","Device Actions uses asynchronous ADB jobs; ADB page shows output, history and cancellation. Cast uses a managed scrcpy H.264 video/audio window.","Plugins are validated .cyplugin manifests; an ADB tunnel requires an actual TCP service in the target app.","Core operation files belong to private tasks. Export results before FinishTask deletes temporary files.","Native QuestDev tool calls are available in Codex. Other integrated providers currently receive text context; external AI clients can use the MCP catalogue."};
         for(const auto& d:devices)context["devices"].push_back({{"serial",d.serial},{"state",d.state},{"model",d.model}});
         for(const auto& p:packages){auto c=counts[p.name];context["applications"].push_back({{"package",p.name},{"system",p.system},{"processCount",c.processes},{"logCount",c.lines},{"errors",c.errors}});}
         for(const auto& p:plugins){Json actions=pluginControlActions(p);for(const auto& a:p.actions)actions.push_back({{"id",a.id},{"label",a.label}});Json record={{"id",p.id},{"name",p.name},{"package",p.package},{"enabled",p.enabled},{"linked",pluginLinked[p.id]},{"actions",actions},{"controller",p.controller},{"installed",std::any_of(packages.begin(),packages.end(),[&](const Package& pkg){return pkg.name==p.package;})}};if(configurablePlugin(p)){auto& panel=pluginPanels[p.id];record["settingsSchema"]=pluginSettingsSchema(p);record["defaults"]=pluginDefaults(p);record["draft"]=panel.draft;record["observed"]=panel.observed;record["availableMetrics"]=panel.available;record["busy"]=panel.task!=0;record["error"]=panel.error.substr(0,1000);record["captureDirectory"]=p.controller=="ovr_metrics"?"/sdcard/Android/data/com.oculus.ovrmonitormetricsservice/files/CapturedMetrics":"/sdcard/Android/data/org.cyinsights.ovr/files/Captures";}context["plugins"].push_back(record);}
@@ -349,6 +362,7 @@ struct App::Impl {
                 auto id=e.value("id",std::string());auto at=std::find_if(approvals.begin(),approvals.end(),[&](const Json& a){return a.value("id",std::string())==id;});if(at!=approvals.end()){approvals.erase(at);replyNative(id,false,Json::object(),"Annulé.");}
                 for(const auto& [job,request]:nativeJobs)if(request==id&&backend)backend->cancel(job);
                 if(nativeMetrics.count(id))metrics->capture().cancel(nativeMetrics[id].first.id);
+                if(nativeMirrors.count(id))videoMirror->cancel(nativeMirrors[id].first.id);
             }
         }
         auto now=std::chrono::steady_clock::now();if(assistantReady&&assistant->running()&&now>=nextContext){assistant->send({{"type","context"},{"context",contextSnapshot()}});nextContext=now+std::chrono::seconds(1);}
@@ -358,6 +372,11 @@ struct App::Impl {
         auto id=request.value("id",std::string()),op=request.value("operation",std::string());auto p=request.value("parameters",Json::object());
         if(request.value("deviceSession",uint64_t(0))!=session){replyNative(id,false,Json::object(),"Le casque a changé.");return;}
         try{
+            if(op=="device_action"&&(p.value("action",std::string())=="mirror_start"||p.value("action",std::string())=="mirror_stop")){
+                bool start=p.at("action")=="mirror_start";if(start&&(!online||options.demo))throw std::runtime_error("Aucun Quest connecté.");
+                MirrorTicket ticket;if(start){auto values=p.value("mirror",Json::object());MirrorOptions config;config.maxSize=values.value("maxSize",1920);config.maxFps=values.value("maxFps",60);config.bitRateMbps=values.value("bitRateMbps",12);config.fullscreen=values.value("fullscreen",false);auto audio=values.value("audio",std::string("duplicate"));config.audio=audio=="off"?0:audio=="duplicate"?1:audio=="output"?2:-1;ticket=videoMirror->start(mirrorEngine,adb,serial,config);}else ticket=videoMirror->stop();
+                nativeMirrors[id]={std::move(ticket),session};return;
+            }
             if(op=="read_metrics"){replyNative(id,true,metrics->capture().query(p));return;}
             if(op=="metrics_action"||op=="record_metrics"){
                 metrics->capture().device(adb,serial,session,online&&!options.demo);
@@ -403,7 +422,6 @@ struct App::Impl {
                 else if(action=="video_stop"){if(!recordTask)throw std::runtime_error("Aucun enregistrement à finaliser.");job.steps={{{"shell",finishVideoCommand()},{}}};}
                 else if(scripts.count(action))job.steps={{{"shell",scripts.at(action)},{}}};
                 else if(action=="reboot")job.steps={{{"reboot"},{}}};else if(action=="wifi_on")job.steps={{{"tcpip","5555"},{}}};else if(action=="usb")job.steps={{{"usb"},{}}};
-                else if(action=="mirror_start"||action=="mirror_stop"){mirror=action=="mirror_start";if(!mirror&&mirrorTask)backend->cancel(mirrorTask);replyNative(id,true,{{"mirror",mirror}});return;}
                 else if(action=="browser"){auto url=p.value("url",std::string());if(url.rfind("https://",0)!=0&&url.rfind("http://",0)!=0)throw std::runtime_error("URL HTTP/HTTPS requise.");job.steps={{{"shell","am start -a android.intent.action.VIEW -d "+shellQuote(url)},{}}};}
                 else if(action=="screenshot"){auto output=p.at("_output").get<std::string>();job.steps={{{"exec-out","screencap","-p"},widen(output)}};result={{"file",output},{"mimeType","image/png"}};}
                 else if(action=="perfetto"){auto output=p.at("_output").get<std::string>();auto remote="/data/misc/perfetto-traces/questdev-"+std::to_string(GetTickCount64())+".perfetto-trace";auto seconds=std::clamp(p.value("seconds",10),1,120);job.timeoutMs=(seconds+30)*1000;job.steps={{{"shell","perfetto","-o",remote,"-t",std::to_string(seconds)+"s","-b","32mb","sched","freq","idle","am","wm","gfx","view","binder_driver"},{}},{{"pull",remote,output},{}},{{"shell","rm -f "+remote},{}}};result={{"file",output},{"mimeType","application/octet-stream"}};}
@@ -691,7 +709,7 @@ struct App::Impl {
             const std::pair<const char*,const char*> commands[]={{"Propriétés Android","getprop"},{"Batterie","dumpsys battery"},{"Stockage","df -h /sdcard"},{"Processus","ps -A -o PID,UID,NAME"},{"Activité courante","dumpsys activity activities"},{"Liaisons TCP","forward --list"}};
             for(const auto& preset:commands)if(cyui::sidebarItem(cyui::icon::code,preset.first,false)){strncpy_s(command.data(),command.size(),preset.second,_TRUNCATE);terminalMode=std::string(preset.second).rfind("forward",0)==0?1:0;}
             cyui::divider();cyui::textFaint("HISTORIQUE");
-            for(auto it=taskOrder.rbegin();it!=taskOrder.rend();++it){auto& t=tasks[*it];if(t.kind=="info"||t.kind=="mirror")continue;ImGui::PushID(int(t.id));if(ImGui::Selectable(((t.done?(t.ok?"OK  ":"ERR "):"…  ")+t.label).c_str(),selectedTask==t.id))selectedTask=t.id;ImGui::PopID();}
+            for(auto it=taskOrder.rbegin();it!=taskOrder.rend();++it){auto& t=tasks[*it];if(t.kind=="info")continue;ImGui::PushID(int(t.id));if(ImGui::Selectable(((t.done?(t.ok?"OK  ":"ERR "):"…  ")+t.label).c_str(),selectedTask==t.id))selectedTask=t.id;ImGui::PopID();}
         }else if(page==5){
             cyui::overline("PLUGINS");cyui::space(10);if(cyui::button("Créer un plugin",cyui::Variant::secondary,ImVec2(-1,0)))newPlugin=true;if(cyui::button("Recharger",cyui::Variant::secondary,ImVec2(-1,0)))reloadPlugins();if(cyui::ghostButton("Ouvrir le dossier utilisateur")){auto dir=userRoot()/L"plugins";std::filesystem::create_directories(dir);openLocal(dir);}cyui::divider();
             for(size_t i=0;i<plugins.size();++i){auto& p=plugins[i];ImGui::PushID(int(i));if(cyui::sidebarItem(cyui::icon::library,p.name.empty()?p.path.filename().string().c_str():p.name.c_str(),selectedPlugin==int(i),!p.error.empty()?"!":configurablePlugin(p)?"HUD":"ADB"))selectedPlugin=int(i);ImGui::PopID();}
@@ -730,7 +748,7 @@ struct App::Impl {
         auto card=[&](const char* id,const char* title,const std::function<void()>& draw){if(cyui::beginCard(id,title))draw();cyui::endCard();};
         if(ImGui::BeginTable("##actionsGrid",3,ImGuiTableFlags_SizingStretchSame)) {
             if(deviceSection==0||deviceSection==1){
-                ImGui::TableNextColumn();card("##cast","DIFFUSION / CAST",[&]{cyui::textDim("Aperçu natif par captures ADB.");cyui::textFaint("Actualisation limitée par screencap.");{cyui::ScopedDisabled disabled(!online||options.demo);if(cyui::button(mirror?"Arrêter l’aperçu":"Démarrer l’aperçu")){mirror=!mirror;if(!mirror&&mirrorTask)backend->cancel(mirrorTask);}}});
+                ImGui::TableNextColumn();card("##cast","MIRRORING VIDÉO / AUDIO",[&]{auto video=videoMirror->state();cyui::textDim("Flux H.264 · fenêtre vidéo native");if(video.active){cyui::textDim("%s",video.status.c_str());if(video.width)cyui::textMono("%d × %d · %d FPS",video.width,video.height,video.fps);{cyui::ScopedDisabled disabled(video.stopping);if(cyui::button("Arrêter et finaliser"))mirrorUi.push_back(videoMirror->stop());}ImGui::SameLine();if(cyui::ghostButton("Voir la vidéo"))videoMirror->focus();}else{cyui::textFaint("Qualité, audio PC, plein écran et MKV.");{cyui::ScopedDisabled disabled(!online||options.demo);if(cyui::button("Démarrer le mirroring…"))mirrorSetup=true;}}if(cyui::ghostButton("Réglages / journal"))mirrorSetup=true;if(!video.error.empty())cyui::textDim("%s",video.error.c_str());});
                 ImGui::TableNextColumn();card("##screen","CAPTURE D’ÉCRAN",[&]{cyui::textDim("PNG du contenu du casque.");{cyui::ScopedDisabled disabled(!online||options.demo);if(cyui::button("Enregistrer une capture…")){auto path=fileDialog(true,L"Image PNG\0*.png\0\0",L"png",L"quest-capture.png");if(!path.empty())submit("Capture d’écran",{{{"exec-out","screencap","-p"},path}},"screenshot",path);}}});
                 ImGui::TableNextColumn();card("##record","ENREGISTREMENT VIDÉO",[&]{ImGui::SetNextItemWidth(cyui::dp(115));ImGui::InputInt("secondes##video",&recordSeconds);recordSeconds=std::clamp(recordSeconds,1,180);{cyui::ScopedDisabled disabled(!online||options.demo||recordTask!=0);if(cyui::button("Enregistrer en MP4…")){auto path=fileDialog(true,L"Vidéo MP4\0*.mp4\0\0",L"mp4",L"quest-recording.mp4");if(!path.empty()){auto job=videoJob(path,recordSeconds);recordTask=submit(job.label,job.steps,"record",path,job.timeoutMs,job.cleanupSteps);}}}if(recordTask){ImGui::SameLine();if(cyui::button("Terminer"))shellAction("Finaliser la vidéo",finishVideoCommand());}});
                 ImGui::TableNextColumn();card("##browser","NAVIGATEUR",[&]{cyui::textField("##browserUrl",browserUrl.data(),int(browserUrl.size()),"https://…",-1);{cyui::ScopedDisabled disabled(!online||options.demo);if(cyui::button("Ouvrir sur le casque")){auto url=trim(browserUrl.data());if(url.rfind("https://",0)==0||url.rfind("http://",0)==0)shellAction("Ouvrir le navigateur","am start -a android.intent.action.VIEW -d "+shellQuote(url));else cyui::notify("Entrez une URL HTTP ou HTTPS.",cyui::Tone::error);}}});
@@ -751,7 +769,7 @@ struct App::Impl {
             ImGui::EndTable();
         }
         cyui::space(10);
-        if(preview->texture()) {cyui::sectionTitle(mirror?"APERÇU EN DIRECT":"DERNIÈRE CAPTURE");auto size=ImGui::GetContentRegionAvail();float width=std::min(size.x,cyui::dp(1000));float height=width*float(preview->height())/float(preview->width());ImGui::Image(static_cast<ImTextureID>(preview->texture()),ImVec2(width,height));}
+        if(preview->texture()) {cyui::sectionTitle("DERNIÈRE CAPTURE");auto size=ImGui::GetContentRegionAvail();float width=std::min(size.x,cyui::dp(1000));float height=width*float(preview->height())/float(preview->width());ImGui::Image(static_cast<ImTextureID>(preview->texture()),ImVec2(width,height));}
     }
     void terminal() {
         cyui::panelHeader("Commandes ADB","Exécution sur le casque sélectionné, sortie en direct et annulation par tâche.");cyui::space(10);
@@ -978,6 +996,29 @@ struct App::Impl {
         cyui::textFaint("Les origines inconnues restent dans Système / non attribué. Aucun rattachement approximatif par UID partagé.");
     }
     void modals() {
+        if(cyui::beginModal("Mirroring vidéo",&mirrorSetup,720)){
+            auto video=videoMirror->state();cyui::heading("Mirroring du Quest",2);cyui::textDim("%s",video.active?video.status.c_str():"Flux vidéo dans une fenêtre dédiée · F11 pour le plein écran");cyui::space(8);
+            {cyui::ScopedDisabled disabled(video.active);
+                if(cyui::beginProperties("##mirrorProperties",cyui::dp(180))){
+                    cyui::property("Résolution maximale");ImGui::SliderInt("##mirrorSize",&mirrorDraft.maxSize,256,4096,"%d px");
+                    cyui::property("Fréquence maximale");ImGui::SliderInt("##mirrorFps",&mirrorDraft.maxFps,15,120,"%d FPS");
+                    cyui::property("Débit vidéo");ImGui::SliderInt("##mirrorRate",&mirrorDraft.bitRateMbps,1,100,"%d Mbit/s");
+                    cyui::property("Audio PC");const char* audio[]={"Désactivé","Dupliquer · garder le son du casque","PC seulement · coupe le son du casque"};cyui::combo("##mirrorAudio",&mirrorDraft.audio,audio,3,-1);
+                    cyui::property("Plein écran au départ");cyui::toggleSwitch("##mirrorFull",&mirrorDraft.fullscreen);
+                    cyui::property("Toujours au premier plan");cyui::toggleSwitch("##mirrorTop",&mirrorDraft.alwaysOnTop);
+                    cyui::property("Recadrage personnalisé");cyui::toggleSwitch("##mirrorCrop",&mirrorCrop);
+                    if(mirrorCrop){cyui::property("Largeur / hauteur");ImGui::SetNextItemWidth(cyui::dp(125));ImGui::InputInt("##cropW",&mirrorDraft.cropWidth);ImGui::SameLine();ImGui::SetNextItemWidth(cyui::dp(125));ImGui::InputInt("##cropH",&mirrorDraft.cropHeight);cyui::property("Décalage X / Y");ImGui::SetNextItemWidth(cyui::dp(125));ImGui::InputInt("##cropX",&mirrorDraft.cropX);ImGui::SameLine();ImGui::SetNextItemWidth(cyui::dp(125));ImGui::InputInt("##cropY",&mirrorDraft.cropY);}
+                    cyui::property("Enregistrement du flux");if(cyui::button("Choisir un fichier MKV…")){auto file=fileDialog(true,L"Vidéo Matroska (*.mkv)\0*.mkv\0\0",L"mkv",L"quest-mirroring.mkv");if(!file.empty()){mirrorDraft.recording=file;mirrorDraft.overwriteRecording=true;}}if(!mirrorDraft.recording.empty()){cyui::textDim("%s",mirrorDraft.recording.filename().u8string().c_str());if(cyui::ghostButton("Sans enregistrement"))mirrorDraft.recording.clear();}
+                    cyui::endProperties();
+                }
+            }
+            cyui::textFaint("La duplication audio nécessite Android 13+ et peut être refusée par une application.\nLe contrôle clavier/souris du casque est désactivé. Le débit réel dépend du casque et de la liaison ADB.");
+            if(video.active){cyui::space(6);cyui::textMono("%d × %d · %d FPS · audio : %s",video.width,video.height,video.fps,(video.audioStatus=="off"?"désactivé":video.audioStatus=="unavailable"?"indisponible":video.audioStatus=="requested_duplicate"?"duplication demandée":"sortie PC demandée"));}
+            if(!video.recordingFile.empty()){cyui::textDim("%s : %s",video.recording?"Enregistrement":"Dernier fichier",video.recordingFile.filename().u8string().c_str());if(!video.active&&cyui::ghostButton("Ouvrir le dossier du fichier"))openLocal(video.recordingFile.parent_path());}
+            if(!video.error.empty())cyui::callout(cyui::Tone::error,video.error.c_str());
+            if(ImGui::CollapsingHeader("Journal du mirroring")){ImGui::BeginChild("##mirrorLog",cyui::dp(0,120),ImGuiChildFlags_Borders);ImGui::TextUnformatted(video.log.c_str());ImGui::EndChild();if(cyui::ghostButton("Copier le journal"))ImGui::SetClipboardText(video.log.c_str());}
+            cyui::space(10);{cyui::ScopedDisabled disabled(video.active||!online||options.demo);if(cyui::primaryButton("Démarrer la diffusion")){try{auto config=mirrorDraft;if(!mirrorCrop)config.cropWidth=config.cropHeight=config.cropX=config.cropY=0;mirrorUi.push_back(videoMirror->start(mirrorEngine,adb,serial,config));mirrorDraft.recording.clear();mirrorDraft.overwriteRecording=false;mirrorSetup=false;ImGui::CloseCurrentPopup();}catch(const std::exception& error){cyui::notify(error.what(),cyui::Tone::error);}}}ImGui::SameLine();if(cyui::button("Fermer")){mirrorSetup=false;ImGui::CloseCurrentPopup();}cyui::endModal();
+        }
         if(cyui::beginModal("Modifier les fichiers",&filesDialog,650)){
             const char* titles[]={"","Créer un dossier","Renommer l’entrée","Supprimer l’entrée","Envoyer avec remplacement possible"};cyui::heading(titles[std::clamp(filesAction,0,4)],2);ImGui::TextWrapped("%s",fileLabel(filesActionTarget).c_str());
             if(filesAction==1||filesAction==2){cyui::space(8);ImGui::SetNextItemWidth(-1);ImGui::InputTextWithHint("##fileNewName",filesAction==1?"Nom du dossier":"Nouveau nom",filesNewName.data(),filesNewName.size());}

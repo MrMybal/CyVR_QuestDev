@@ -87,6 +87,18 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(job['state'],'Completed')
         self.assertEqual(job['outputs']['operation'],'adb_execute')
 
+    def test_mirroring_contract_and_permissions(self):
+        parameters={'action':'mirror_start','mirror':{'maxSize':1600,'maxFps':60,'bitRateMbps':12,'audio':'duplicate','fullscreen':True}}
+        with self.assertRaises(CyToolError):
+            self.reader.call('SubmitJob',sessionId=self.session,operationId='device_action',parameters=parameters)
+        job=self.controller.call('SubmitJob',sessionId=self.control_session,operationId='device_action',parameters=parameters)
+        job=self.finish(self.controller,job)
+        self.assertEqual(job['state'],'Completed')
+        self.assertEqual(job['outputs']['parameters']['mirror'],parameters['mirror'])
+        for value in [{'maxFps':121},{'maxSize':1},{'bitRateMbps':0},{'audio':'microphone'},{'recording':'unowned.mkv'}]:
+            with self.assertRaises(CyToolError):
+                self.controller.call('SubmitJob',sessionId=self.control_session,operationId='device_action',parameters={'action':'mirror_start','mirror':value})
+
     def test_private_export_and_isolation(self):
         job=self.reader.call('SubmitJob',sessionId=self.session,operationId='export_logs',parameters={})
         job=self.finish(self.reader,job)

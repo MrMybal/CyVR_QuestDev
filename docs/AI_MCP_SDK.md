@@ -57,7 +57,7 @@ with QuestDevClient() as quest:
 | `read_logs` | `package`, `text`, `minimum=V..F`, `limit=1..2000` ; réponse bornée en octets |
 | `export_logs` | mêmes filtres, `format=text|jsonl` ; fichier privé |
 | `adb_execute` | `command`, `mode=shell|adb`, `timeout=1..300` secondes |
-| `device_action` | `action`, `url`, `seconds` ; schéma complet dans le manifeste |
+| `device_action` | `action`, `url`, `seconds`, `mirror` (résolution, FPS, débit, audio, plein écran) ; schéma complet dans le manifeste |
 | `application_action` | `action=launch|stop`, `package` |
 | `list_plugins` | aucune |
 | `plugin_action` | `plugin` : ID, `action=connect|disconnect|ID d’action`, `settings` selon le schéma découvert |

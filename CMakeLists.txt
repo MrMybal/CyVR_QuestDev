@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
 cmake_minimum_required(VERSION 3.20)
-project(CyVR_QuestDev VERSION 0.5.0 LANGUAGES CXX)
+project(CyVR_QuestDev VERSION 0.6.0 LANGUAGES CXX)
 # CMake can misdecode French MSVC's UTF-8 /showIncludes prefix as OEM text.
 # Keep Ninja's header dependency scanner aligned with the compiler output.
 if(MSVC AND CMAKE_CL_SHOWINCLUDES_PREFIX MATCHES "^Remarque")
@@ -37,8 +37,8 @@ add_subdirectory("${CYUI_ROOT}" "${CMAKE_BINARY_DIR}/cyui")
 set(IMGUI_DIR "${CYUI_ROOT}/third_party/imgui")
 add_library(quest_core STATIC src/core.cpp)
 target_include_directories(quest_core PUBLIC include)
-add_library(quest_backend STATIC src/backend.cpp src/plugins.cpp src/metrics_plugins.cpp src/files.cpp src/metrics_data.cpp src/metrics_capture.cpp)
-target_link_libraries(quest_backend PUBLIC quest_core)
+add_library(quest_backend STATIC src/backend.cpp src/plugins.cpp src/metrics_plugins.cpp src/files.cpp src/metrics_data.cpp src/metrics_capture.cpp src/mirroring.cpp)
+target_link_libraries(quest_backend PUBLIC quest_core user32)
 target_include_directories(quest_backend PUBLIC include third_party)
 add_executable(CyVR_QuestDev WIN32 src/main.cpp src/app.cpp src/preview.cpp src/assistant_bridge.cpp src/metrics_view.cpp
     "${IMGUI_DIR}/backends/imgui_impl_win32.cpp"
@@ -62,6 +62,14 @@ if(MSVC)
 endif()
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(fake_scrcpy tests/fake_scrcpy.cpp)
+    add_executable(quest_mirroring_tests tests/mirroring_tests.cpp)
+    target_link_libraries(quest_mirroring_tests PRIVATE quest_backend)
+    if(MSVC)
+        target_compile_options(fake_scrcpy PRIVATE /W4 /utf-8 /EHsc)
+        target_compile_options(quest_mirroring_tests PRIVATE /W4 /utf-8 /EHsc)
+    endif()
+    add_test(NAME quest_video_mirroring COMMAND quest_mirroring_tests $<TARGET_FILE:fake_scrcpy> $<TARGET_FILE:fake_adb>)
     add_executable(quest_tests tests/core_tests.cpp)
     target_link_libraries(quest_tests PRIVATE quest_backend)
     add_executable(fake_adb tests/fake_adb.cpp)

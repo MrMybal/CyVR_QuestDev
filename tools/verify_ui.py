@@ -23,6 +23,7 @@ def main():
     cases += [(name,['--demo','--page',str(page)]) for page,name in enumerate(('console','applications','settings','device-actions','adb','plugins','assistant','files'))]
     cases += [('files-'+theme,['--demo','--page','7','--theme',theme]) for theme in ('mid-grey','light-grey','amber-night','violet')]
     cases += [('metrics-'+theme,['--demo','--page','8','--theme',theme]) for theme in ('navy','mid-grey','light-grey','amber-night','violet')]
+    cases += [('mirror-'+theme,['--demo','--page','3','--mirror-settings','--theme',theme]) for theme in ('navy','mid-grey','light-grey','amber-night','violet')]
     for plugin,label in (('meta.ovr-metrics','ovr-metrics'),('cyinsights.ovr','cyinsight-ovr')):
         cases += [(label+'-'+theme,['--demo','--page','5','--plugin',plugin,'--theme',theme]) for theme in ('navy','mid-grey','light-grey','amber-night','violet')]
         cases += [(label+'-connection',['--demo','--page','5','--plugin',plugin,'--plugin-tab','1'])]
