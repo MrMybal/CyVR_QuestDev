@@ -14,6 +14,10 @@ Bibliothèque de widgets et thèmes, liée depuis le dossier indiqué par `CYUI_
 
 Sources et backends Win32/DirectX 11 fournis par le dépôt CyUI. Licence MIT, copyright 2014–2026 Omar Cornut. Notice complète : [licenses/ImGui.txt](licenses/ImGui.txt).
 
+## Installateur Windows
+
+L’installateur utilise [Inno Setup 6.7.4](https://github.com/jrsoftware/issrc/releases/tag/is-6_7_4), copyright 1997–2026 Jordan Russell et portions copyright 2000–2026 Martijn Laan, sous [licence Inno Setup](LICENCES/Inno-Setup.txt). Le compilateur est un outil de build externe ; le programme d’installation et de désinstallation conserve ses notices.
+
 ## Android Debug Bridge
 
 Exécutable externe des Android SDK Platform-Tools, détecté sur la machine ou sélectionné dans les réglages. Aucun binaire ADB n’est inclus. [Documentation Android officielle](https://developer.android.com/tools/adb).

@@ -113,7 +113,7 @@ class UpdatesTests(unittest.TestCase):
         lines=queue.Queue()
         reader=threading.Thread(target=lambda:[lines.put(line) for line in worker.stdout],daemon=True);reader.start()
         try:
-            ready=json.loads(lines.get(timeout=5));self.assertEqual(ready['current'],'0.7.0-alpha.1');self.assertEqual(ready['prefs']['channel'],'alpha');self.assertFalse(ready['prefs']['autoCheck'])
+            ready=json.loads(lines.get(timeout=5));self.assertEqual(ready['current'],(ROOT/'VERSION').read_text().strip());self.assertEqual(ready['prefs']['channel'],'alpha');self.assertFalse(ready['prefs']['autoCheck'])
             worker.stdin.write(json.dumps({'type':'preferences','values':{'channel':'stable','useGit':False}})+'\n');worker.stdin.flush()
             for _ in range(4):
                 state=json.loads(lines.get(timeout=5))

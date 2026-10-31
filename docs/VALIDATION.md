@@ -1,5 +1,15 @@
 # Validation
 
+## Alpha 0.7.0-2 — installateur Windows
+
+Validation du 31 octobre 2026 : build Release et 178 contrôles C++ réussis ; les 8 tests updater passent. Le test du worker lit désormais `VERSION` au lieu de figer une ancienne Alpha.
+
+L’installateur Inno Setup a été vérifié avec un identifiant et des raccourcis Windows de test distincts : installation par utilisateur sans élévation, chemins avec espaces et accents, menu Démarrer/Bureau, inventaire et SHA-256 de tous les fichiers installés, réinstallation et refus d’un dossier personnel non dédié. Le compilateur officiel 6.7.4 est préparé en mode portable après vérification de son empreinte épinglée et de sa signature Authenticode.
+
+Le test effectue ensuite une mise à jour, une restauration et une nouvelle mise à jour avec le bootstrap embarqué et de vrais redémarrages de l’app (Core et worker prêts). Un composant fictif ajouté par la nouvelle version permet de vérifier sa suppression par le désinstalleur d’origine. La désinstallation retire aussi les caches Python des modules livrés, l’entrée Windows et les raccourcis ; les fichiers personnels et préférences fictives restent présents. Aucun dossier personnel n’est supprimé récursivement. Le Setup de distribution est compilé depuis le même payload vérifié ; seul l’identifiant et le nom de l’installation de test diffèrent.
+
+Reproduire : `tools/setup_installer.py`, `tools/build_installer.py --test` puis `tools/verify_installer.py` ; paramètres dans [RELEASE.md](RELEASE.md). Le Setup est livré sans signature de code Cyberalien.
+
 ## Version 0.7 — mises à jour GitHub
 
 Validation du 31 octobre 2026. Build Release réussi, 178 contrôles C++ et 14 tests Python Core réussis. Le test CSV temporisé a été relancé isolément après contention avec les captures UI ; la suite complète suivante passe.

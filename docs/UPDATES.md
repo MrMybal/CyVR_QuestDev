@@ -18,7 +18,7 @@ Les préférences sous `%LOCALAPPDATA%/CyVR/QuestDev` restent en place. Les fich
 
 **Restaurer et redémarrer** revient à la sauvegarde associée au dossier courant. Les sauvegardes ne sont pas supprimées automatiquement. **Ouvrir le dossier des mises à jour** permet de consulter les téléchargements et les résultats ; les sauvegardes de l’application sont dans des dossiers voisins du dossier installé.
 
-L’installation nécessite une distribution portable dans un dossier dédié et modifiable. Elle est désactivée pour les builds de développement, les copies Git et les dossiers système ; aucune élévation administrateur n’est lancée. Les liens/jonctions sont refusés dans l’arbre remplacé. Un grand volume de fichiers personnels dans le dossier de l’app peut nécessiter une installation manuelle dans un dossier dédié. Arrêter les enregistrements et le mirroring avant l’installation.
+L’installation nécessite un dossier dédié et modifiable, issu du ZIP portable ou de l’installateur par utilisateur (Alpha 2 et suivantes). Les fichiers de désinstallation et les raccourcis de l’installation Windows sont conservés lors des mises à jour et restaurations. Elle est désactivée pour les builds de développement, les copies Git et les dossiers système ; aucune élévation administrateur n’est lancée. Les liens/jonctions sont refusés dans l’arbre remplacé. Un grand volume de fichiers personnels dans le dossier de l’app peut nécessiter une installation manuelle dans un dossier dédié. Arrêter les enregistrements et le mirroring avant l’installation.
 
 ## Développement
 

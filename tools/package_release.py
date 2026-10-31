@@ -113,6 +113,10 @@ def package(output,cyui):
         'Code source correspondant : archive Source de la même release. Licence GPLv3, notices tierces incluses.\n',encoding='utf8')
     manifest={'version':VERSION,'channel':'alpha','commit':commit,'python':PYTHON_VERSION,'platform':'Windows x64'}
     (product/'RELEASE.json').write_text(json.dumps(manifest,indent=2),encoding='utf8')
+    # Kept current by ZIP updates so the original uninstaller also knows files
+    # introduced by newer releases. Never enumerate unknown/personal files.
+    installed_files=sorted({p.relative_to(product).as_posix() for p in product.rglob('*') if p.is_file()}|{'INSTALL-FILES.txt','UPDATE-MANIFEST.json'})
+    (product/'INSTALL-FILES.txt').write_text('\n'.join(installed_files)+'\n',encoding='utf-8-sig')
     update_files={p.relative_to(product).as_posix():digest(p) for p in sorted(product.rglob('*')) if p.is_file()}
     (product/'UPDATE-MANIFEST.json').write_text(json.dumps({'version':VERSION,'platform':'Windows x64','files':update_files},indent=2),encoding='utf8')
     source=output/f'CyVR_QuestDev-{VERSION}-Source';source.mkdir()

@@ -16,7 +16,7 @@ Neuf espaces possèdent leur propre navigation : **Console, Applications, Régla
 
 ## Démarrer
 
-Pour une archive **Alpha Windows x64**, extraire tout le ZIP de la release puis lancer `CyVR_QuestDev.exe`. Python et CyToolsCore sont embarqués ; ADB reste externe. Voir [les archives et leur préparation](docs/RELEASE.md).
+Télécharger **Windows-x64-Setup.exe** depuis la [release Alpha](https://github.com/MrMybal/CyVR_QuestDev/releases) pour installer l’app pour votre compte Windows, avec raccourcis et désinstallation. Aucun droit administrateur n’est demandé. Le **ZIP Windows x64** reste disponible pour une utilisation portable : extraire toute l’archive puis lancer `CyVR_QuestDev.exe`. Python et CyToolsCore sont embarqués ; ADB reste externe. Voir [l’installation](docs/INSTALLATION.md) et [la préparation des releases](docs/RELEASE.md).
 
 Lancer `build/windows/CyVR_QuestDev.exe`. L’application détecte ADB dans le dossier de l’exécutable, le SDK Android ou le PATH. Le chemin peut être changé dans **Réglages**.
 
