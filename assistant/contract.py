@@ -47,7 +47,7 @@ def descriptor():
             'resourceRequirements':{'ramBytes':128*1024*1024 if name in {'metrics_action','read_metrics','record_metrics'} else 8*1024*1024}})
     return {'schemaVersion':1,'protocolVersion':'1.0','id':'cyvr.questdev','name':'CyVRQuestDev',
         'displayName':'CyVR QuestDev','description':'Native Meta Quest development tools and live application context',
-        'vendor':'Cyberalien','author':'Cyberalien','version':'0.6.0','executable':'questdev-tool',
+        'vendor':'Cyberalien','author':'Cyberalien','version':'0.7.0','executable':'questdev-tool',
         'categories':['development','vr'],'capabilities':['jobs','sessions','cancellation','device-actions','application-logs','device-files','configurable-plugins','metrics-curves','metrics-recording','video-mirroring'],
         'operations':operations,'backends':[],
         'platforms':[{'os':'Windows','architecture':'x64','status':'Supported','computeBackends':['CPU']}],

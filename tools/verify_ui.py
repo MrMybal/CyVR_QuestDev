@@ -19,6 +19,7 @@ def main():
     exe = root / 'build/windows/CyVR_QuestDev.exe'
     environment = {key.upper(): value for key, value in os.environ.items()}
     cases = [(theme, ['--demo', '--theme', theme]) for theme in ('navy', 'mid-grey', 'light-grey', 'amber-night', 'violet')]
+    cases += [('updates-'+theme,['--demo','--updates-settings','--theme',theme]) for theme in ('navy','mid-grey','light-grey','amber-night','violet')]
     cases += [('compare', ['--demo', '--compare'])]
     cases += [(name,['--demo','--page',str(page)]) for page,name in enumerate(('console','applications','settings','device-actions','adb','plugins','assistant','files'))]
     cases += [('files-'+theme,['--demo','--page','7','--theme',theme]) for theme in ('mid-grey','light-grey','amber-night','violet')]

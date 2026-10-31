@@ -22,6 +22,7 @@ def main():
             if not (destination/item.filename).resolve().is_relative_to(destination):raise RuntimeError('Invalid archive path')
         source.extractall(destination)
     product=next(destination.glob('CyVR_QuestDev-*-Windows-x64'))
+    assert (product/'updater/service.py').is_file() and (product/'UPDATE-MANIFEST.json').is_file()
     environment=dict(os.environ)
     environment['PATH']=str(Path(os.environ['SystemRoot'])/'System32')
     environment['LOCALAPPDATA']=str(destination/'profile')
@@ -32,7 +33,7 @@ def main():
     assert (product/'runtime/mirror/scrcpy-server').is_file()
     csv=destination/'fixture.csv';csv.write_text('Time Stamp,average_frame_rate,custom\n1000,90,\n1100,88,-2\n',encoding='utf8')
     screenshot=destination/'metrics.bmp'
-    command=[str(product/'CyVR_QuestDev.exe'),'--adb',str(ROOT/'build/windows/fake_adb.exe'),'--metrics-csv',str(csv),'--page','8','--capture',str(screenshot),'--capture-after-ms','15000']
+    command=[str(product/'CyVR_QuestDev.exe'),'--adb',str(ROOT/'build/windows/fake_adb.exe'),'--metrics-csv',str(csv),'--page','8','--capture',str(screenshot),'--capture-after-ms','45000']
     app=subprocess.Popen(command,cwd=product,env=environment,creationflags=subprocess.CREATE_NO_WINDOW)
     try:
         connection=destination/'profile/CyVR/QuestDev/assistant/connection.json'
@@ -86,14 +87,14 @@ async def check():
 asyncio.run(check())
 print('Embedded Python + Windows imports + SDK + 38 MCP tools + metrics/export OK')
 '''
-        subprocess.run([str(product/'runtime/python/Scripts/python.exe'),'-B','-c',code,str(connection),str(product)],cwd=product,env=environment,check=True,timeout=20)
-        app.wait(timeout=25);assert app.returncode==0
+        subprocess.run([str(product/'runtime/python/Scripts/python.exe'),'-B','-c',code,str(connection),str(product)],cwd=product,env=environment,check=True,timeout=30)
+        app.wait(timeout=55);assert app.returncode==0
         assert screenshot.stat().st_size>10000
         assert not connection.exists(),'Connection retained after normal app shutdown'
         print('Relocated ZIP, restricted PATH, native rendering and shutdown OK')
     finally:
         if app.poll() is None:
-            try:app.wait(timeout=25)
+            try:app.wait(timeout=55)
             except subprocess.TimeoutExpired:app.terminate();app.wait(timeout=10)
 
 

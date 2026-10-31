@@ -7,7 +7,7 @@
   "description": "Native Meta Quest development tools and live application context",
   "vendor": "Cyberalien",
   "author": "Cyberalien",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "executable": "questdev-tool",
   "categories": [
     "development",

@@ -7,6 +7,7 @@
 #include <cyui/CyUI.h>
 #include "quest/app.hpp"
 #include "quest/resources.h"
+#include "quest/version.hpp"
 
 #include <imgui.h>
 #include <imgui_impl_dx11.h>
@@ -23,6 +24,7 @@
 #include <memory>
 #include <chrono>
 #include <fstream>
+#include <filesystem>
 #include <cmath>
 #include <cstdio>
 #include <string>
@@ -189,6 +191,8 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
     // --capture out.bmp [--theme key] [--comfortable] [--tab n]: renders a few
     // frames, writes the window to a BMP and quits.
     std::wstring capturePath;
+    std::wstring updateReadyFile;
+    int updateReadyFrames{};
     std::string themeKey = "navy";
     quest::Options options;
     int captureFrames = 80;
@@ -208,6 +212,8 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
         else if (arg == L"--metrics-csv") options.metricsCsv = next();
         else if (arg == L"--scrcpy") options.scrcpy = next();
         else if (arg == L"--mirror-settings") options.mirrorSetup = true;
+        else if (arg == L"--updates-settings") {options.updatesSettings=true;options.page=2;}
+        else if (arg == L"--update-ready-file") updateReadyFile=next();
         else if (arg == L"--plugin-tab") options.pluginTab = std::clamp(_wtoi(next().c_str()),0,2);
         else if (arg == L"--page") options.page = _wtoi(next().c_str());
         else if (arg == L"--frames") captureFrames = std::max(20, _wtoi(next().c_str()));
@@ -269,6 +275,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
         io.IniFilename = nullptr;
 
     options.graphicsDevice=gDevice;
+    options.windowHandle=hwnd;
     auto app = std::make_unique<quest::App>(options);
     if(!capturePath.empty())io.IniFilename=nullptr;
     const auto started=std::chrono::steady_clock::now();
@@ -305,6 +312,13 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
         gContext->OMSetRenderTargets(1, &gTarget, nullptr);
         gContext->ClearRenderTargetView(gTarget, clear);
         ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+        if(!updateReadyFile.empty()&&++updateReadyFrames>=10&&app->readyForUpdate()){
+            wchar_t local[32768]{};GetEnvironmentVariableW(L"LOCALAPPDATA",local,32768);
+            std::error_code error;auto allowed=std::filesystem::weakly_canonical(std::filesystem::path(local)/L"CyVR/QuestDev/updates/jobs",error);
+            auto path=std::filesystem::weakly_canonical(std::filesystem::path(updateReadyFile),error);auto relative=path.lexically_relative(allowed);
+            if(!error&&path.is_absolute()&&path.filename()==L"health.json"&&!relative.empty()&&*relative.begin()!=L".."){auto temp=path.wstring()+L".tmp";std::ofstream ready(temp,std::ios::binary);ready<<"{\"ok\":true,\"version\":\""<<quest::AppVersion<<"\",\"pid\":"<<GetCurrentProcessId()<<"}";ready.close();if(ready)MoveFileExW(temp.c_str(),path.c_str(),MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH);}
+            updateReadyFile.clear();
+        }
         if (!capturePath.empty() && ++frames >= captureFrames && io.DisplaySize.x>0 && io.DisplaySize.y>0 && std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-started).count()>=captureDelay) {
             captureOk = captureBackBuffer(capturePath.c_str());
             std::ofstream stats(capturePath+L".stats.txt");stats<<app->diagnostics();

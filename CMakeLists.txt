@@ -2,7 +2,10 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
 cmake_minimum_required(VERSION 3.20)
-project(CyVR_QuestDev VERSION 0.6.0 LANGUAGES CXX)
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" QUESTDEV_RELEASE_VERSION LIMIT_COUNT 1)
+string(REGEX MATCH "^[0-9]+\\.[0-9]+\\.[0-9]+" QUESTDEV_CORE_VERSION "${QUESTDEV_RELEASE_VERSION}")
+project(CyVR_QuestDev VERSION ${QUESTDEV_CORE_VERSION} LANGUAGES CXX)
+configure_file(include/quest/version.hpp.in "${CMAKE_BINARY_DIR}/generated/quest/version.hpp" @ONLY)
 # CMake can misdecode French MSVC's UTF-8 /showIncludes prefix as OEM text.
 # Keep Ninja's header dependency scanner aligned with the compiler output.
 if(MSVC AND CMAKE_CL_SHOWINCLUDES_PREFIX MATCHES "^Remarque")
@@ -41,7 +44,7 @@ add_library(quest_core STATIC src/core.cpp)
 target_include_directories(quest_core PUBLIC include)
 add_library(quest_backend STATIC src/backend.cpp src/plugins.cpp src/metrics_plugins.cpp src/files.cpp src/metrics_data.cpp src/metrics_capture.cpp src/mirroring.cpp)
 target_link_libraries(quest_backend PUBLIC quest_core user32)
-target_include_directories(quest_backend PUBLIC include third_party)
+target_include_directories(quest_backend PUBLIC include third_party "${CMAKE_BINARY_DIR}/generated")
 add_executable(CyVR_QuestDev WIN32 src/main.cpp src/app.cpp src/preview.cpp src/assistant_bridge.cpp src/metrics_view.cpp
     "${CMAKE_BINARY_DIR}/quest_resources.rc"
     "${IMGUI_DIR}/backends/imgui_impl_win32.cpp"
@@ -70,6 +73,10 @@ if(MSVC)
 endif()
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(fake_update_app tests/fake_update_app.cpp)
+    if(MSVC)
+        target_compile_options(fake_update_app PRIVATE /W4 /utf-8 /EHsc)
+    endif()
     add_executable(fake_scrcpy tests/fake_scrcpy.cpp)
     add_executable(quest_mirroring_tests tests/mirroring_tests.cpp)
     target_link_libraries(quest_mirroring_tests PRIVATE quest_backend)

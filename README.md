@@ -2,7 +2,7 @@
   <img src="assets/branding/cyvr-questdev-logo-gradient.png" alt="Logo CyVR QuestDev" width="160">
 </p>
 
-# CyVR QuestDev 0.6
+# CyVR QuestDev 0.7
 
 Outils de développement pour Meta Quest, en C++17, Win32 et DirectX 11, avec l’interface **CyUI / CyImgui_Interface**.
 
@@ -34,6 +34,7 @@ Dans **Console**, la colonne de gauche propose **Actives**, **Installées** et *
 - **Métriques** : toutes les colonnes disponibles des CSV OVR, sélection des courbes, zoom et curseur communs, suivi des écritures du casque, enregistrement sur PC, ouverture et export CSV. [Guide](docs/METRICS.md).
 - **Assistant IA** : discussion intégrée ou fenêtre séparée, contexte inspectable, choix du modèle, réponse progressive, annulation, politique des outils et configuration MCP.
 - **MCP / SDK** : véritable runtime [CyToolsCore 0.10.1 MIT](https://github.com/MrMybal/CyToolsCore), adaptateurs officiels HTTP/MCP et dix-sept opérations communes avec l’interface native. Import automatique des sources locales et export durable des téléchargements et enregistrements.
+- **Mises à jour GitHub** : canaux stable/Alpha, connexion au dépôt privé, téléchargement vérifié, installation avec redémarrage et sauvegarde/restauration de la version précédente. Depuis **Réglages → Mises à jour GitHub**. [Guide](docs/UPDATES.md).
 
 - Capture simultanée des buffers Android `main`, `system`, `crash` et `events`.
 - Journaux par package, y compris les processus `package:service` et `package:renderer`.

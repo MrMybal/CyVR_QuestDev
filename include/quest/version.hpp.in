@@ -1,0 +1,7 @@
+// Copyright (c) 2026 Cyberalien
+// SPDX-License-Identifier: GPL-3.0-only
+#pragma once
+namespace quest {
+inline constexpr char AppVersion[]="@QUESTDEV_RELEASE_VERSION@";
+inline constexpr char CoreVersion[]="@QUESTDEV_CORE_VERSION@";
+}

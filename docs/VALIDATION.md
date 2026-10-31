@@ -1,5 +1,17 @@
 # Validation
 
+## Version 0.7 — mises à jour GitHub
+
+Validation du 31 octobre 2026. Build Release réussi, 178 contrôles C++ et 14 tests Python Core réussis. Le test CSV temporisé a été relancé isolément après contention avec les captures UI ; la suite complète suivante passe.
+
+- **8 tests updater** : ordre des versions et canaux, redirections sans transmission du jeton au CDN, téléchargement incomplet/altéré, chemins ZIP et doublons Windows, manifeste et SHA-256, conservation des fichiers personnels, refus des sources et fichiers gérés modifiés, identité du processus parent, remplacement réel et restauration après échec du nouvel exécutable. Le protocole du worker vérifie aussi les préférences et son état.
+- **47 rendus UI**, dont la page des mises à jour dans les cinq thèmes ; inspection navy/light-grey.
+- **Transaction portable réelle** sur copies jetables : bootstrap Python embarqué déplacé, attente du parent, remplacement, redémarrage Win32 avec Core et worker disponibles, sauvegarde et restauration explicite. Les préférences personnelles et fichiers ajoutés après installation sont encore présents après restauration.
+- Accès au catalogue privé GitHub validé avec la connexion Git existante. Stockage/lecture/suppression d’un jeton fictif dans une entrée Windows de test unique.
+
+Reproduire : tests C++ et Core habituels, `python -m unittest discover -s updater/tests -v`, `python tools/verify_ui.py`, puis `python tools/verify_updates.py --product <dossier-portable> --output <nouveau-dossier>`. Les essais ne remplacent pas le checkout ni l’installation utilisée par l’utilisateur.
+
+
 ## Alpha 0.6.0-2 — identité de l’application
 
 Validation du 31 octobre 2026 : build Release réussi, logo affiché dans les cinq thèmes (inspection navy et light-grey), PNG embarqué identique à l’asset approuvé et groupe d’icônes Windows en dix résolutions. Une fenêtre réelle expose les icônes grande et petite. Les 178 contrôles C++ existants passent. Le README utilise le même PNG et une capture de démonstration actualisée.

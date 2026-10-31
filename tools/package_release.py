@@ -15,7 +15,7 @@ import zipfile
 from setup_mirroring import validate as validate_mirroring, RUNTIME_FILES, SOURCES
 
 ROOT=Path(__file__).resolve().parents[1]
-VERSION='0.6.0-alpha.2'
+VERSION=(ROOT/'VERSION').read_text(encoding='ascii').strip()
 PYTHON_VERSION='3.13.17'
 PYTHON_URL=f'https://www.python.org/ftp/python/{PYTHON_VERSION}/python-{PYTHON_VERSION}-embeddable-amd64.zip'
 PYTHON_SHA256='0ba1ee4bfcbdc3a559d27e2e9ce76d04a7839947a23f46375872c755c0d463b8'
@@ -93,7 +93,7 @@ def package(output,cyui):
     product=output/f'CyVR_QuestDev-{VERSION}-Windows-x64';product.mkdir()
     copy(ROOT/'build/windows/CyVR_QuestDev.exe',product/'CyVR_QuestDev.exe')
     for name in tracked:
-        include=(name.startswith(('assistant/','plugins/','docs/','examples/','LICENCES/','licenses/')) and not name.startswith('assistant/tests/')) or (name.startswith('assets/branding/') and Path(name).suffix in {'.png','.ico'}) or name in {'README.md','THIRD_PARTY.md','runtime/requirements.lock'}
+        include=(name.startswith(('assistant/','updater/','plugins/','docs/','examples/','LICENCES/','licenses/')) and not name.startswith(('assistant/tests/','updater/tests/'))) or (name.startswith('assets/branding/') and Path(name).suffix in {'.png','.ico'}) or name in {'README.md','THIRD_PARTY.md','runtime/requirements.lock','VERSION'}
         if include:copy(ROOT/name,product/name)
     for source,target in [('LICENSE','LICENSE.txt'),('COPYRIGHT','COPYRIGHT.txt')]:copy(ROOT/source,product/target)
     prepare_runtime(product,ROOT/'build/release-cache')
@@ -108,10 +108,13 @@ def package(output,cyui):
         'OVR Metrics / CyInsightOVR : installer leurs distributions officielles sur le casque.\n\n'
         'Mirroring : Appareil → Mirroring vidéo / audio → Démarrer le mirroring. Moteur scrcpy inclus.\n'
         'Réglages vidéo/audio, F11 plein écran, enregistrement MKV facultatif.\n\n'
+        'Mises à jour : Réglages → Mises à jour GitHub. Voir docs/UPDATES.md.\n\n'
         'Version Alpha : voir docs/VALIDATION.md et docs/METRICS.md pour les limites connues.\n'
         'Code source correspondant : archive Source de la même release. Licence GPLv3, notices tierces incluses.\n',encoding='utf8')
     manifest={'version':VERSION,'channel':'alpha','commit':commit,'python':PYTHON_VERSION,'platform':'Windows x64'}
     (product/'RELEASE.json').write_text(json.dumps(manifest,indent=2),encoding='utf8')
+    update_files={p.relative_to(product).as_posix():digest(p) for p in sorted(product.rglob('*')) if p.is_file()}
+    (product/'UPDATE-MANIFEST.json').write_text(json.dumps({'version':VERSION,'platform':'Windows x64','files':update_files},indent=2),encoding='utf8')
     source=output/f'CyVR_QuestDev-{VERSION}-Source';source.mkdir()
     for name in tracked:copy(ROOT/name,source/'CyVR_QuestDev'/name)
     for name in [item['file'] for item in SOURCES]+['origins.json']:

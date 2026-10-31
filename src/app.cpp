@@ -10,6 +10,7 @@
 #include "quest/metrics_view.hpp"
 #include "quest/mirroring.hpp"
 #include "quest/resources.h"
+#include "quest/version.hpp"
 #include <cyui/CyUI.h>
 #include <imgui.h>
 #define WIN32_LEAN_AND_MEAN
@@ -153,6 +154,14 @@ struct App::Impl {
     bool filesTruncated{},filesHidden{true},filesDialog{},filesOverwrite{};
     std::wstring filesUploadSource;
     std::map<uint64_t,std::wstring> fileDestinations;
+    std::unique_ptr<AssistantBridge> updateBridge;
+    Json updateState={{"phase","idle"},{"busy",false},{"current",AppVersion},{"status","Recherchez les nouvelles versions sur GitHub."},{"prefs",{{"channel","alpha"},{"autoCheck",false},{"useGit",true}}}};
+    std::array<char,2049> updateToken{};
+    bool updateAutoChecked{};
+    bool updateWorkerReady{};
+    HANDLE updateInstaller{};
+    std::filesystem::path updateReady;
+    std::chrono::steady_clock::time_point updateLaunchTime{};
 
     explicit Impl(Options o) : options(std::move(o)),adb(options.adb.empty()?findAdb():options.adb),page(options.page),compare(options.compare) {
         if(!options.demo) {
@@ -176,8 +185,10 @@ struct App::Impl {
         if(!options.demo){std::ifstream profile(userRoot()/L"ai-profile.json");Json j;try{profile>>j;provider=std::clamp(j.value("provider",0),0,6);auto copy=[&](auto& field,const char* key){strncpy_s(field.data(),field.size(),j.value(key,std::string()).c_str(),_TRUNCATE);};copy(aiModel,"model");copy(aiEndpoint,"endpoint");copy(aiKeyEnv,"api_key_env");copy(aiExecutable,"executable");}catch(...){} }
         if(options.demo){seedDemo();browseFiles(filesFolder);}
         else if(isFile((productRoot()/L"runtime/python/Scripts/python.exe").wstring()))startAssistant();
+        if(options.updatesSettings)settingsSection=1;
+        if(!options.demo){updateBridge=std::make_unique<AssistantBridge>();std::string error;if(!updateBridge->start((productRoot()/L"runtime/python/Scripts/python.exe").wstring(),(productRoot()/L"updater/service.py").wstring(),(userRoot()/L"updates").wstring(),error))updateState["error"]="Le runtime de mise à jour n’est pas disponible. Utilisez une archive portable complète.";}
     }
-    ~Impl(){videoMirror.reset();metrics.reset();backend.reset();for(const auto& pair:tasks)if(pair.second.kind=="files:list"||pair.second.kind=="files:download"){std::error_code ec;std::filesystem::remove(pair.second.path,ec);}if(assistant)assistant->stop();}
+    ~Impl(){if(updateBridge)updateBridge->stop();if(updateInstaller)CloseHandle(updateInstaller);SecureZeroMemory(updateToken.data(),updateToken.size());videoMirror.reset();metrics.reset();backend.reset();for(const auto& pair:tasks)if(pair.second.kind=="files:list"||pair.second.kind=="files:download"){std::error_code ec;std::filesystem::remove(pair.second.path,ec);}if(assistant)assistant->stop();}
     void saveSettings() {
         if(options.demo)return;
         std::ofstream out(settingsPath());out<<"theme="<<cyui::currentThemeKey()<<"\nadb="<<narrow(adb)<<"\n";
@@ -203,6 +214,7 @@ struct App::Impl {
         openApp(options.package.empty()?packages[0].name:options.package);view.follow=false;second.package=packages[1].name;
     }
     void tick() {
+        tickUpdates();
         for(auto it=mirrorUi.begin();it!=mirrorUi.end();){if(it->result.wait_for(std::chrono::seconds(0))==std::future_status::ready){auto result=it->result.get();if(!result.ok)cyui::notify(result.error.c_str(),cyui::Tone::error);it=mirrorUi.erase(it);}else ++it;}
         for(auto it=nativeMirrors.begin();it!=nativeMirrors.end();){if(it->second.first.result.wait_for(std::chrono::seconds(0))==std::future_status::ready){auto result=it->second.first.result.get();if(it->second.second!=session){result.ok=false;result.error="Le casque sélectionné a changé.";}replyNative(it->first,result.ok,result.data,result.error);it=nativeMirrors.erase(it);}else ++it;}
         metrics->capture().device(adb,serial,session,online&&!options.demo);
@@ -318,9 +330,10 @@ struct App::Impl {
         }catch(const std::exception& error){filesError=error.what();}
     }
     Json contextSnapshot() {
-        Json context={{"application","CyVR QuestDev"},{"version","0.6.0"},{"session",session},{"selectedDevice",serial},{"online",online},{"capturing",capturing},{"page",page},{"selectedPackage",view.package},{"devices",Json::array()},{"applications",Json::array()},{"plugins",Json::array()},{"recentLogs",Json::array()},{"deviceInfo",deviceInfo}};
+        Json context={{"application","CyVR QuestDev"},{"version","0.7.0"},{"session",session},{"selectedDevice",serial},{"online",online},{"capturing",capturing},{"page",page},{"selectedPackage",view.package},{"devices",Json::array()},{"applications",Json::array()},{"plugins",Json::array()},{"recentLogs",Json::array()},{"deviceInfo",deviceInfo}};
         context["pages"]={{"console",0},{"applications",1},{"settings",2},{"device",3},{"adb",4},{"plugins",5},{"assistant",6},{"files",7},{"metrics",8}};
         context["metrics"]=metrics->describe();
+        context["updates"]={{"current",AppVersion},{"phase",updateState.value("phase",std::string("idle"))},{"available",updateState.contains("release")&&!updateState["release"].is_null()?updateState["release"].value("version",std::string()):std::string()},{"usage","Settings > Mises à jour GitHub. Authentication, download and installation are native UI actions."}};
         context["mirroring"]=videoMirror->describe();
         context["mirroringUsage"]="Device > Mirroring vidéo / audio starts real H.264 video in a native window. F11 toggles fullscreen. mirror_start/stop device actions await first texture / graceful shutdown. Optional mirror settings: maxSize, maxFps, bitRateMbps, audio=off|duplicate|output, fullscreen. Audio duplication keeps headset playback on Android 13+, but apps may opt out. Native UI can record MKV during the session. Stop on device change/disconnect/app shutdown. Does not start apps, change Wi-Fi mode or kill the shared ADB server.";
         context["metricsUsage"]="Metrics page: open OVR CSV, select columns, shared time zoom/pan/cursor. Refresh reports with metrics_action to discover remote paths; read_metrics returns bounded samples (missing=null), seconds from first CSV timestamp. record_metrics waits for CSV collection/restoration, needs a running VR app, and may return filesSaved=0. Follow cadence depends on OVR file writes. Export Core recordings before FinishTask. UI recordings persist on PC.";
@@ -718,7 +731,7 @@ struct App::Impl {
             cyui::overline("PLUGINS");cyui::space(10);if(cyui::button("Créer un plugin",cyui::Variant::secondary,ImVec2(-1,0)))newPlugin=true;if(cyui::button("Recharger",cyui::Variant::secondary,ImVec2(-1,0)))reloadPlugins();if(cyui::ghostButton("Ouvrir le dossier utilisateur")){auto dir=userRoot()/L"plugins";std::filesystem::create_directories(dir);openLocal(dir);}cyui::divider();
             for(size_t i=0;i<plugins.size();++i){auto& p=plugins[i];ImGui::PushID(int(i));if(cyui::sidebarItem(cyui::icon::library,p.name.empty()?p.path.filename().string().c_str():p.name.c_str(),selectedPlugin==int(i),!p.error.empty()?"!":configurablePlugin(p)?"HUD":"ADB"))selectedPlugin=int(i);ImGui::PopID();}
         }else if(page==2){
-            cyui::overline("RÉGLAGES");cyui::space(10);cyui::textDim("Connexion ADB");cyui::textDim("Apparence");cyui::textDim("Comportement du journal");cyui::divider();if(cyui::sidebarItem(cyui::icon::code,"MCP / SDK et IA",false))page=6;cyui::textFaint("CyUI · Dear ImGui\nCyToolsCore · MIT");
+            cyui::overline("RÉGLAGES");cyui::space(10);item(cyui::icon::settings,"Général",settingsSection,0);item(cyui::icon::download,"Mises à jour GitHub",settingsSection,1);cyui::divider();if(cyui::sidebarItem(cyui::icon::code,"MCP / SDK et IA",false))page=6;cyui::textFaint("CyUI · Dear ImGui\nCyToolsCore · MIT");
         }else if(page==8){metrics->sidebar();
         }else if(page==7){
             cyui::overline("FICHIERS DU QUEST");cyui::space(10);
@@ -965,12 +978,79 @@ struct App::Impl {
         ImGui::SameLine();if(assistantBusy&&cyui::button("Arrêter"))assistant->send({{"type","cancel"}});
         ImGui::SameLine();if(cyui::button("Exporter la discussion…")){auto path=fileDialog(true,L"Texte\0*.txt\0\0",L"txt",L"questdev-conversation.txt");if(!path.empty()){std::ofstream out(path,std::ios::binary);for(const auto& line:chat)out<<line.first<<"\n"<<line.second<<"\n\n";}}
     }
+    void launchUpdate(const Json& value) {
+        auto plan=std::filesystem::path(widen(value.at("plan").get<std::string>()));auto python=std::filesystem::path(widen(value.at("python").get<std::string>()));auto script=std::filesystem::path(widen(value.at("script").get<std::string>()));auto ready=std::filesystem::path(widen(value.at("ready").get<std::string>()));
+        auto base=std::filesystem::weakly_canonical(userRoot()/L"updates/jobs");auto relative=plan.lexically_relative(base);
+        if(!plan.is_absolute()||relative.empty()||*relative.begin()==L".."||plan.filename()!=L"plan.json"||python!=plan.parent_path()/L"bootstrap/python.exe"||script!=plan.parent_path()/L"bootstrap/apply.py"||ready!=plan.parent_path()/L"ready.json")throw std::runtime_error("Préparation de mise à jour invalide.");
+        auto quote=[](const std::wstring& text){std::wstring out=L"\"";size_t n=0;for(auto c:text){if(c==L'\\'){++n;continue;}out.append(c==L'"'?2*n+1:n,L'\\');out+=c;n=0;}out.append(n*2,L'\\');return out+L'"';};
+        auto updateCommand=quote(python.wstring())+L" -I -S "+quote(script.wstring())+L" --plan "+quote(plan.wstring());STARTUPINFOW startup{};startup.cb=sizeof(startup);PROCESS_INFORMATION process{};
+        if(!CreateProcessW(python.c_str(),updateCommand.data(),nullptr,nullptr,FALSE,CREATE_NO_WINDOW,nullptr,python.parent_path().c_str(),&startup,&process))throw std::runtime_error("L’installateur n’a pas pu démarrer.");
+        CloseHandle(process.hThread);updateInstaller=process.hProcess;updateReady=ready;updateLaunchTime=std::chrono::steady_clock::now();
+    }
+    void tickUpdates() {
+        if(updateBridge)for(auto& event:updateBridge->poll())if(event.value("type",std::string())=="update_state"){
+            event.erase("type");updateState.update(event);
+            if(event.contains("current")&&event.contains("prefs"))updateWorkerReady=true;
+            if(event.value("phase",std::string())=="available"&&event.contains("release")&&!event["release"].is_null()){auto text="Version "+event["release"].value("version",std::string())+" disponible · Réglages > Mises à jour GitHub";cyui::notify(text.c_str(),cyui::Tone::info,6);}
+            if(event.contains("prepared")){try{launchUpdate(event.at("prepared"));}catch(const std::exception& e){updateState["error"]=e.what();updateState["busy"]=false;}updateState.erase("prepared");}
+            if(!updateAutoChecked&&event.contains("prefs")){updateAutoChecked=true;if(event.at("prefs").value("autoCheck",false))updateBridge->send({{"type","check"}});}
+        }
+        if(updateInstaller){
+            bool finished=false,accepted=false;
+            try{if(std::filesystem::is_regular_file(updateReady)&&std::filesystem::file_size(updateReady)<4096){std::ifstream input(updateReady);Json result;input>>result;if(result.value("ok",false)){accepted=true;PostMessageW(static_cast<HWND>(options.windowHandle),WM_CLOSE,0,0);}else{updateState["error"]=result.value("error",std::string("L’installation a été annulée."));updateState["busy"]=false;}finished=true;}}
+            catch(...){updateState["error"]="Réponse de l’installateur invalide.";updateState["busy"]=false;finished=true;}
+            if(!finished&&(WaitForSingleObject(updateInstaller,0)==WAIT_OBJECT_0||std::chrono::steady_clock::now()-updateLaunchTime>std::chrono::seconds(15))){updateState["error"]="L’installateur n’a pas confirmé son démarrage. L’application reste ouverte.";updateState["busy"]=false;finished=true;}
+            if(finished){if(!accepted&&WaitForSingleObject(updateInstaller,0)==WAIT_TIMEOUT){TerminateProcess(updateInstaller,1);WaitForSingleObject(updateInstaller,2000);}CloseHandle(updateInstaller);updateInstaller=nullptr;}
+        }
+    }
+    void updateAction(const char* kind) {
+        if(!updateBridge||!updateBridge->running())return;
+        Json message={{"type",kind}};
+        if(std::string(kind)=="install"||std::string(kind)=="rollback"){FILETIME created{},exited{},kernel{},user{};GetProcessTimes(GetCurrentProcess(),&created,&exited,&kernel,&user);message["target"]=appRoot().u8string();message["parentPid"]=GetCurrentProcessId();message["parentCreated"]=(uint64_t(created.dwHighDateTime)<<32)|created.dwLowDateTime;}
+        updateBridge->send(message);if(std::string(kind)!="cancel")updateState["busy"]=true;
+    }
+    void updatesPage() {
+        cyui::panelHeader("Mises à jour GitHub","Téléchargement vérifié, sauvegarde de la version actuelle et redémarrage.");cyui::space(10);
+        bool busy=updateState.value("busy",false),available=updateState.contains("release")&&!updateState["release"].is_null(),downloaded=updateState.value("downloaded",false);auto prefs=updateState.value("prefs",Json::object());
+        if(cyui::beginCard("##updates","CYVR QUESTDEV")){
+            cyui::heading((std::string("Version ")+AppVersion).c_str(),2);cyui::textDim("Source : MrMybal / CyVR_QuestDev · Windows x64");
+            {cyui::ScopedDisabled disabled(busy||options.demo||!updateBridge||!updateBridge->running());
+                int channel=prefs.value("channel",std::string("alpha"))=="stable"?0:1;bool automatic=prefs.value("autoCheck",false),git=prefs.value("useGit",true);bool changed=false;
+                if(cyui::beginProperties("##updatePrefs",cyui::dp(210))){const char* channels[]={"Versions stables","Alpha et préversions"};cyui::property("Canal de mise à jour");if(cyui::combo("##updateChannel",&channel,channels,2,-1))changed=true;
+                    cyui::property("Rechercher au démarrage");if(cyui::toggleSwitch("##updateAutomatic",&automatic))changed=true;
+                    cyui::property("Connexion Git existante");if(cyui::toggleSwitch("##updateGit",&git))changed=true;cyui::endProperties();}
+                if(changed)updateBridge->send({{"type","preferences"},{"values",{{"channel",channel?"alpha":"stable"},{"autoCheck",automatic},{"useGit",git}}}});
+                if(cyui::button("Rechercher une mise à jour"))updateAction("check");
+            }
+            cyui::space(8);ImGui::TextWrapped("%s",updateState.value("status",std::string()).c_str());
+            if(busy){auto phase=updateState.value("phase",std::string());cyui::progressBar(phase=="downloading"?float(updateState.value("progress",0.0)):-1.0f,ImVec2(-1,0));if(phase=="checking"||phase=="downloading")if(cyui::ghostButton("Annuler"))updateAction("cancel");}
+            if(available){auto release=updateState["release"];cyui::space(8);cyui::heading(("Disponible : "+release.value("version",std::string())).c_str(),3);cyui::textDim("%.1f Mo",release.value("size",0.0)/(1024*1024));
+                {cyui::ScopedDisabled disabled(busy||options.demo);if(!downloaded){if(cyui::primaryButton("Télécharger et vérifier"))updateAction("download");}else{bool recording=videoMirror->state().active||recordTask||metrics->describe().value("recording",false);bool portable=isFile((appRoot()/L"RELEASE.json").wstring());{cyui::ScopedDisabled blocked(recording||!portable);if(cyui::primaryButton("Installer et redémarrer"))updateAction("install");}if(recording)cyui::textFaint("Arrêtez les enregistrements et le mirroring avant l’installation.");if(!portable)cyui::textFaint("Build de développement : installez une archive portable pour la mise à jour intégrée.");}}
+                if(ImGui::CollapsingHeader("Notes de version")){ImGui::PushTextWrapPos();ImGui::TextUnformatted(release.value("notes",std::string()).c_str());ImGui::PopTextWrapPos();}
+            }
+            if(!updateState.value("error",std::string()).empty())cyui::callout(cyui::Tone::error,updateState["error"].get<std::string>().c_str());
+        }cyui::endCard();cyui::space(10);
+        if(cyui::beginCard("##updateAuth","ACCÈS AU DÉPÔT PRIVÉ")){
+            ImGui::TextWrapped("Le compte GitHub doit avoir accès au dépôt. Utilisez la connexion Git existante ou un jeton à accès fin limité à ce dépôt, avec Contents en lecture.");
+            cyui::textFaint("%s",updateState.value("savedCredential",false)?"Jeton conservé dans le Gestionnaire d’identifiants Windows.":"Aucun jeton spécifique enregistré dans Windows.");
+            {cyui::ScopedDisabled disabled(busy||options.demo||!updateBridge||!updateBridge->running());ImGui::SetNextItemWidth(-1);ImGui::InputTextWithHint("##updateToken","Jeton GitHub (masqué)",updateToken.data(),updateToken.size(),ImGuiInputTextFlags_Password);
+                if(cyui::button("Enregistrer dans Windows")){updateBridge->send({{"type","save_token"},{"token",updateToken.data()}});SecureZeroMemory(updateToken.data(),updateToken.size());}ImGui::SameLine();if(cyui::ghostButton("Oublier ce jeton"))updateBridge->send({{"type","forget_token"}});}
+            if(cyui::ghostButton("Créer un jeton sur GitHub"))ShellExecuteW(nullptr,L"open",L"https://github.com/settings/personal-access-tokens/new",nullptr,nullptr,SW_SHOWNORMAL);
+        }cyui::endCard();cyui::space(10);
+        if(cyui::beginCard("##updateBackup","VERSION PRÉCÉDENTE")){
+            ImGui::TextWrapped("La version actuelle est sauvegardée avant le remplacement. Les préférences utilisateur et les plugins personnels sont conservés. Si le nouveau démarrage échoue, la sauvegarde est restaurée.");
+            auto previous=updateState.value("previousVersion",std::string());if(!previous.empty()){cyui::textDim("Sauvegarde : %s",previous.c_str());{cyui::ScopedDisabled disabled(busy||options.demo||videoMirror->state().active||recordTask||metrics->describe().value("recording",false));if(cyui::button("Restaurer et redémarrer"))updateAction("rollback");}}
+            if(cyui::ghostButton("Ouvrir le dossier des mises à jour")){auto path=userRoot()/L"updates";std::filesystem::create_directories(path);openLocal(path);}
+        }cyui::endCard();
+    }
     void settings() {
+        if(settingsSection==1){updatesPage();return;}
         cyui::panelHeader("Réglages", "Connexion, apparence et fonctionnement du journal.");cyui::space(12);
         if(cyui::beginCard("##license","CYVR QUESTDEV · GPLv3")) {
             cyui::textDim("Copyright © 2026 Cyberalien · GPL-3.0-only");
             ImGui::TextWrapped("Logiciel libre : vous pouvez le redistribuer et le modifier selon la GNU GPL version 3. Fourni sans aucune garantie. Les composants tiers conservent leurs propres licences.");
             if(cyui::button("Lire la licence GPLv3"))openLocal(appRoot()/L"LICENSE.txt");
+            ImGui::SameLine();if(cyui::button("Mises à jour GitHub…"))settingsSection=1;
         }cyui::endCard();cyui::space(10);
         if(cyui::beginCard("##adb","ANDROID DEBUG BRIDGE")) {
             if(cyui::beginProperties("##adbProps",cyui::dp(140))) {
@@ -1104,6 +1184,7 @@ struct App::Impl {
 App::App(Options options) : impl_(std::make_unique<Impl>(std::move(options))) {}
 App::~App() = default;
 void App::frame(){impl_->frame();}
+bool App::readyForUpdate()const{return impl_->options.demo||(impl_->assistantReady&&impl_->updateWorkerReady&&impl_->updateBridge&&impl_->updateBridge->running());}
 std::string App::diagnostics() const {
     std::ostringstream out;out<<"demo="<<impl_->options.demo<<"\nonline="<<impl_->online<<"\ncapturing="<<impl_->capturing<<"\npackages="<<impl_->packages.size()<<"\nprocesses="<<impl_->store.processes().size()<<"\nlines="<<impl_->store.entries().size()<<"\nstatus="<<impl_->status<<"\n";
     for(const auto& [package,c]:impl_->counts)if(c.lines)out<<(package.empty()?"[system/unknown]":package)<<" lines="<<c.lines<<" errors="<<c.errors<<"\n";

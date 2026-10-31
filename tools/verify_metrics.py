@@ -60,7 +60,7 @@ def main():
         time.sleep(2)
         with QuestDevClient(connection) as quest:
             context=quest.invoke('get_context')['context']
-            assert context['version']=='0.6.0' and context['selectedDevice']=='FAKE-QUEST',context
+            assert context['version']=='0.7.0' and context['selectedDevice']=='FAKE-QUEST',context
             assert context['pages']['metrics']==8
             quest.invoke('metrics_action',{'action':'open_csv','sourceFile':str(source)})
             values=quest.invoke('read_metrics',{'metrics':['average_frame_rate','custom_extra'],'start':.1,'end':.2,'limit':2})
