@@ -1,5 +1,15 @@
 # Validation
 
+## Alpha 0.8.0-1 — journal, applications et transferts préparés
+
+Validation du 31 octobre 2026 : build Release, 228 contrôles C++, 14 tests Python Core et 8 tests updater réussis. Les suites C++ couvrent la rétention modifiable, l’attribution après redimensionnement, les listes PC, les noms et collisions Windows, les transferts préparés séquentiels, le lien au casque, la reprise, les annulations et la finalisation atomique. Un test dédié vérifie qu’un processus ADB parallèle ne peut pas conserver un handle local étranger. Les tests Core et updater restent disponibles.
+
+30 rendus et 5 nouvelles captures finales de la liste : `tools/verify_ui.py --features` rend les applications, réglages de logs, Device Actions, fichiers simples, fichiers côte à côte et lots préparés dans les cinq thèmes. Inspection visuelle navy, mid-grey et light-grey avec des données de démonstration. Quatre démarrages dans trois profils isolés : `tools/verify_settings.py` vérifie les réglages enregistrés, leurs bornes, les valeurs invalides et leur relecture au redémarrage dans des profils isolés. `tools/verify_native.py --fake` vérifie les opérations et permissions, le catalogue de 38 outils MCP, les fichiers, l’annulation et la fermeture propre sur le runtime réel avec ADB simulé.
+
+Ces vérifications ne déclenchent aucun changement des paramètres d’un Quest réel. Les commandes des interrupteurs reprennent les actions déjà présentes ; l’état inconnu et une demande non vérifiée sont explicitement distingués d’un état confirmé. Les copies de dossiers restent hors périmètre et les listes préparées sont conservées dans la session courante.
+
+La transition d’une distribution antérieure peut être testée avec `python tools/verify_updates.py --product <nouveau-produit> --previous <produit-précédent> --output <nouveau-dossier>`, puis l’installateur avec le scénario de [RELEASE.md](RELEASE.md).
+
 ## Alpha 0.7.0-2 — installateur Windows
 
 Validation du 31 octobre 2026 : build Release et 178 contrôles C++ réussis ; les 8 tests updater passent. Le test du worker lit désormais `VERSION` au lieu de figer une ancienne Alpha.

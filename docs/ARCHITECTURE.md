@@ -21,9 +21,11 @@ Les courbes OVR ont un worker indépendant (`metrics_capture.cpp`). Il suit les 
 
 L’interface ne lance aucune commande ADB bloquante. Le worker effectue les requêtes et les actions ; un second thread lit le flux. Les résultats passent par une file synchronisée ; l’interface ignore les événements d’une ancienne session.
 
-La file des lignes est limitée à 16 Mo. Les lignes de plus de 256 Ko sont rejetées. Le journal est limité à 50 000 entrées et 64 Mo comptabilisés. Ses vues utilisent des identifiants stables et un `ImGuiListClipper`, puis construisent leurs index uniquement quand le contenu ou les filtres changent. Les états de pause des deux vues sont indépendants.
+La file des lignes est limitée à 16 Mo. Les lignes de plus de 256 Ko sont rejetées. Le journal conserve par défaut 50 000 entrées / 64 Mo comptabilisés ; ses deux limites sont réglables et enregistrées dans `settings.ini`. `LogStore::setLimits` applique la rotation immédiatement, conserve l’attribution/PID et incrémente la révision utilisée par les vues. Ses vues utilisent des identifiants stables et un `ImGuiListClipper`, puis construisent leurs index uniquement quand le contenu ou les filtres changent. Les états de pause des deux vues sont indépendants.
 
 Les commandes sont lancées via `CreateProcessW`, sans fenêtre de terminal. Les arguments Windows sont échappés individuellement. Les packages et composants utilisés dans les commandes distantes sont validés. Les appels ont un délai maximal, une annulation à la fermeture et une lecture de sortie bornée. Le client Logcat est arrêté sans tuer le serveur ADB partagé avec les autres outils.
+
+La liste explicite `PROC_THREAD_ATTRIBUTE_HANDLE_LIST` limite chaque enfant ADB à ses propres pipes et fichier de sortie. Une capture Logcat parallèle ne peut ainsi pas retenir un handle de fichier temporaire ouvert par un autre traitement.
 
 L’export sérialise les lignes actuellement visibles. Le JSONL conserve le timestamp Unix en microsecondes ainsi que l’identité du processus et du package.
 
@@ -40,6 +42,8 @@ Les captures CyInsightOVR complètes restent séparées des résumés du context
 `assistant_bridge.cpp` lance le Python privé, deux pipes NDJSON UTF-8 et un Job Object Windows pour les enfants. Le compagnon `assistant/service.py` utilise le vrai runtime CyToolsCore et ses adaptateurs HTTP/MCP. Le contrat commun décrit dix-sept opérations, leurs schémas et permissions. Le contexte est actualisé chaque seconde. Les lectures natives rejoignent le thread UI ; les actions utilisent les jobs ADB et la politique d’autorisation commune à IA/MCP/SDK.
 
 `files.cpp` normalise les chemins Android, construit les commandes et décode les listes délimitées par NUL. Noms et métadonnées restent séparés, y compris avec espaces, accents et retours à la ligne. La liste binaire utilise un fichier de job ; elle est bornée à 5 000 entrées et paginée pour le MCP. Les racines protégées et réponses incomplètes sont refusées.
+
+`file_workspace.cpp` dessine les volets PC/Quest et leur sélection multiple, puis pilote la file de `transfers.cpp`. La préparation est indépendante de la navigation. Chaque transfert garde son appareil, ses chemins et sa politique de remplacement ; un seul fichier est soumis au backend à la fois. Les résultats sont acquittés avant le prochain départ, y compris les annulations et nettoyages. Changer d’appareil suspend le lot. Les plans et fichiers partiels restent locaux ; le contexte partagé expose les compteurs, modes et états du navigateur, sans recopier les chemins locaux de toute la liste.
 
 Les envois utilisent un temporaire unique puis un renommage sans remplacement par défaut. L’annulation retire le temporaire avant d’acquitter le job. Les téléchargements UI utilisent un `.part` et ne remplacent le fichier local qu’après succès via `MoveFileExW`. Le SDK produit ses fichiers dans la tâche privée Core. `configure_inputs` importe le champ `push_file.sourceFile` sans modifier l’original. Les requêtes de liste sont liées à l’appareil et à la navigation courante.
 

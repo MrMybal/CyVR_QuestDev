@@ -2,7 +2,7 @@
   <img src="assets/branding/cyvr-questdev-logo-gradient.png" alt="Logo CyVR QuestDev" width="160">
 </p>
 
-# CyVR QuestDev 0.7
+# CyVR QuestDev 0.8
 
 Outils de développement pour Meta Quest, en C++17, Win32 et DirectX 11, avec l’interface **CyUI / CyImgui_Interface**.
 
@@ -26,11 +26,11 @@ Dans **Console**, la colonne de gauche propose **Actives**, **Installées** et *
 
 ## Fonctions disponibles
 
-- Navigation latérale adaptée à chaque page ; le gestionnaire d’applications possède ses propres catégories et sa propre recherche.
-- **Device Actions** : mirroring H.264 avec audio PC, fenêtre vidéo, plein écran, qualité réglable, recadrage et enregistrement MKV ; PNG, vidéo MP4 avec arrêt anticipé, navigateur, GPU profiling, Perfetto, HUD et enregistrement CSV OVR Metrics, récupération des CSV, Wi-Fi ADB, proximité, Boundary, veille/réveil et redémarrage. [Guide du mirroring](docs/MIRRORING.md).
+- Navigation latérale adaptée à chaque page ; le gestionnaire d’applications affiche le nombre installé par catégorie et le nombre réellement affiché après recherche.
+- **Device Actions** : cartes avec icônes et interrupteurs animés pour GPU, HUD/CSV, ADB Wi-Fi, proximité et Boundary ; mirroring H.264 avec audio PC, fenêtre vidéo, plein écran, qualité réglable, recadrage et MKV ; PNG, MP4, navigateur, Perfetto, récupération des CSV, veille/réveil et redémarrage. Les états non lus ou non vérifiés sont signalés. [Guide du mirroring](docs/MIRRORING.md).
 - **ADB** : shell Android ou arguments ADB, sortie progressive, délai maximal, tâches concurrentes, annulation, historique et export.
 - **Plugins** : OVR Metrics et CyInsightOVR configurables directement dans QuestDev, profils locaux, métriques/graphiques, placement du HUD, CSV, connexion au collecteur et captures GPU `.cyovr`. Manifestes `.cyplugin`, actions Android et tunnels TCP ADB forward/reverse. [Guide](docs/PLUGINS.md).
-- **Fichiers** : navigation dans le stockage, raccourcis par application, filtres, métadonnées, envoi/récupération, création de dossiers, renommage et suppression de fichiers ou de dossiers vides. Transferts en arrière-plan, annulation et remplacement explicite.
+- **Fichiers** : volet Quest seul ou **PC / Quest côte à côte**, sélection multiple, navigation et filtres indépendants. Transfert immédiat ou **liste préparée optionnelle**, lancement séquentiel du lot, annulation par fichier ou de tout le lot, reprise et arrêt sur erreur. Création, renommage et suppression de fichiers/dossiers vides sur le Quest. [Guide](docs/FILES.md).
 - **Métriques** : toutes les colonnes disponibles des CSV OVR, sélection des courbes, zoom et curseur communs, suivi des écritures du casque, enregistrement sur PC, ouverture et export CSV. [Guide](docs/METRICS.md).
 - **Assistant IA** : discussion intégrée ou fenêtre séparée, contexte inspectable, choix du modèle, réponse progressive, annulation, politique des outils et configuration MCP.
 - **MCP / SDK** : véritable runtime [CyToolsCore 0.10.1 MIT](https://github.com/MrMybal/CyToolsCore), adaptateurs officiels HTTP/MCP et dix-sept opérations communes avec l’interface native. Import automatique des sources locales et export durable des téléchargements et enregistrements.
@@ -48,7 +48,7 @@ Dans **Console**, la colonne de gauche propose **Actives**, **Installées** et *
 - Connexion Wi-Fi à un appareil dont ADB TCP/IP est déjà configuré.
 - Cinq thèmes CyUI ; thème et chemin ADB enregistrés dans `%LOCALAPPDATA%/CyVR/QuestDev`.
 
-Le tampon conserve au maximum **50 000 lignes / 64 Mo de données comptabilisées**. Les lignes les plus anciennes sont ensuite retirées. La pause fige l’affichage, mais la capture et la rotation du tampon continuent. Le compteur du bas signale les lignes retirées ou perdues si la file de réception sature.
+Le tampon conserve par défaut **50 000 lignes / 64 Mo de données comptabilisées**. **Réglages → Limites du journal** permet de choisir de **1 000 à 5 000 000 lignes** et de **16 à 2 048 Mo**, avec des préréglages et une sauvegarde locale. La première limite atteinte retire les lignes les plus anciennes ; réduire les limites les applique immédiatement. La pause fige l’affichage, mais la capture continue. Le compteur du bas affiche les limites actives et les lignes retirées ou perdues si la file de réception sature.
 
 Les processus d’origine incertaine restent dans **Système / non attribué**. Le logiciel ne devine pas leur application à partir d’un UID partagé. Les événements Android de gestion des processus servent à l’attribution et sont masqués par défaut ; les filtres avancés permettent de les afficher.
 

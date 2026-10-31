@@ -65,6 +65,10 @@ static std::vector<std::string> eventFields(const std::string& text) {
     while (std::getline(s, f, ',')) out.push_back(trim(f)); return out;
 }
 LogStore::LogStore(size_t capacity, size_t bytes) : capacity_(std::max(size_t(1), capacity)), byteLimit_(std::max(size_t(1024), bytes)) {}
+void LogStore::setLimits(size_t capacity,size_t bytes) {
+    capacity_=std::max(size_t(1),capacity);byteLimit_=std::max(size_t(1024),bytes);
+    limit();++revision_;
+}
 std::string LogStore::packageFor(const std::string& process) const {
     auto name = process.substr(0, process.find(':'));
     return packages_.count(name) ? name : "";

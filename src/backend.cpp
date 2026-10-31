@@ -49,10 +49,17 @@ CommandResult runProcess(const std::wstring& exe, const std::vector<std::string>
     HANDLE binary=INVALID_HANDLE_VALUE;
     if(!outputFile.empty())binary=CreateFileW(outputFile.c_str(),GENERIC_WRITE,FILE_SHARE_READ,&security,CREATE_ALWAYS,FILE_ATTRIBUTE_NORMAL,nullptr);
     if(!outputFile.empty() && binary==INVALID_HANDLE_VALUE){CloseHandle(read);CloseHandle(write);if(nullInput!=INVALID_HANDLE_VALUE)CloseHandle(nullInput);out.output="Impossible d’ouvrir le fichier de sortie.";return out;}
-    STARTUPINFOW si{}; si.cb=sizeof(si); si.dwFlags=STARTF_USESTDHANDLES; si.hStdOutput=binary!=INVALID_HANDLE_VALUE?binary:write; si.hStdError=write; si.hStdInput=nullInput;
+    STARTUPINFOEXW si{};si.StartupInfo.cb=sizeof(si);si.StartupInfo.dwFlags=STARTF_USESTDHANDLES;si.StartupInfo.hStdOutput=binary!=INVALID_HANDLE_VALUE?binary:write;si.StartupInfo.hStdError=write;si.StartupInfo.hStdInput=nullInput==INVALID_HANDLE_VALUE?nullptr:nullInput;
+    // Concurrent jobs must inherit only their own pipes. Inheriting every open
+    // handle can let Logcat keep another transfer's local staging file locked.
+    SIZE_T attributeBytes{};InitializeProcThreadAttributeList(nullptr,1,0,&attributeBytes);std::vector<unsigned char> attributeStorage(attributeBytes);
+    si.lpAttributeList=reinterpret_cast<PPROC_THREAD_ATTRIBUTE_LIST>(attributeStorage.data());
+    bool attributes=InitializeProcThreadAttributeList(si.lpAttributeList,1,0,&attributeBytes)!=FALSE;
+    std::vector<HANDLE> inherited{write};if(binary!=INVALID_HANDLE_VALUE)inherited.push_back(binary);if(nullInput!=INVALID_HANDLE_VALUE)inherited.push_back(nullInput);
+    bool handleList=attributes&&UpdateProcThreadAttribute(si.lpAttributeList,0,PROC_THREAD_ATTRIBUTE_HANDLE_LIST,inherited.data(),inherited.size()*sizeof(HANDLE),nullptr,nullptr)!=FALSE;
     PROCESS_INFORMATION pi{}; std::wstring command=quote(exe); for (const auto& a:args) command+=L" "+quote(widen(a));
-    BOOL started = CreateProcessW(exe.c_str(),command.data(),nullptr,nullptr,TRUE,CREATE_NO_WINDOW,nullptr,nullptr,&si,&pi);
-    DWORD err=GetLastError(); CloseHandle(write);if(binary!=INVALID_HANDLE_VALUE)CloseHandle(binary);if (nullInput != INVALID_HANDLE_VALUE) CloseHandle(nullInput);
+    BOOL started=handleList?CreateProcessW(exe.c_str(),command.data(),nullptr,nullptr,TRUE,CREATE_NO_WINDOW|EXTENDED_STARTUPINFO_PRESENT,nullptr,nullptr,&si.StartupInfo,&pi):FALSE;
+    DWORD err=GetLastError();if(attributes)DeleteProcThreadAttributeList(si.lpAttributeList);CloseHandle(write);if(binary!=INVALID_HANDLE_VALUE)CloseHandle(binary);if (nullInput != INVALID_HANDLE_VALUE) CloseHandle(nullInput);
     if (!started) { CloseHandle(read); out.output="Impossible de lancer ADB (Windows "+std::to_string(err)+")."; return out; }
     CloseHandle(pi.hThread); auto begin=std::chrono::steady_clock::now(); bool terminated=false;
     for (;;) {

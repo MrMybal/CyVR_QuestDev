@@ -50,6 +50,9 @@ public:
     bool ingest(const std::string& line);
     void clear();
     void reset();
+    void setLimits(size_t capacity, size_t bytes);
+    size_t capacity() const { return capacity_; }
+    size_t byteLimit() const { return byteLimit_; }
     const std::deque<LogEntry>& entries() const { return entries_; }
     const std::vector<ProcessInfo>& processes() const { return processes_; }
     std::string packageFor(const std::string& process) const;

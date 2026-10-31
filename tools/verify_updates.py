@@ -50,9 +50,10 @@ def wait_file(path,timeout=60):
 
 
 def main():
-    parser=argparse.ArgumentParser();parser.add_argument('--product',type=Path,required=True);parser.add_argument('--output',type=Path,required=True);args=parser.parse_args()
+    parser=argparse.ArgumentParser();parser.add_argument('--product',type=Path,required=True);parser.add_argument('--previous',type=Path,help='Start with a different, previously published product to check version transitions');parser.add_argument('--output',type=Path,required=True);args=parser.parse_args()
     work=args.output.resolve();work.mkdir(parents=True,exist_ok=False);target=work/'Application équipe';source=args.product.resolve()
-    shutil.copytree(source,target)
+    previous=args.previous.resolve() if args.previous else source
+    shutil.copytree(previous,target)
     (target/'personal.ini').write_text('fixture preference',encoding='utf8')
     (target/'plugins/personal.txt').write_text('fixture personal plugin',encoding='utf8')
     env=dict(os.environ);env['LOCALAPPDATA']=str(work/'profile');env['PATH']=str(Path(os.environ['SystemRoot'])/'System32')
@@ -76,7 +77,7 @@ def main():
             assert (target/'plugins/personal.txt').read_text(encoding='utf8')=='fixture personal plugin'
             if rollback:assert (target/'after-update.txt').read_text()=='preserved during rollback'
             else:(target/'after-update.txt').write_text('preserved during rollback')
-            assert digest(target/'CyVR_QuestDev.exe')==digest(source/'CyVR_QuestDev.exe')
+            assert digest(target/'CyVR_QuestDev.exe')==digest((previous if rollback else source)/'CyVR_QuestDev.exe')
             print(('Rollback' if rollback else 'Install')+': detached embedded Python, native restart/Core readiness, backup and personal files OK',flush=True)
     finally:
         for pid in reversed(children):

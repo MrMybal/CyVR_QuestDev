@@ -213,6 +213,9 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
         else if (arg == L"--scrcpy") options.scrcpy = next();
         else if (arg == L"--mirror-settings") options.mirrorSetup = true;
         else if (arg == L"--updates-settings") {options.updatesSettings=true;options.page=2;}
+        else if (arg == L"--log-settings") {options.logSettings=true;options.page=2;}
+        else if (arg == L"--files-side-by-side") options.filesSplit=true;
+        else if (arg == L"--files-queue") options.filesQueue=true;
         else if (arg == L"--update-ready-file") updateReadyFile=next();
         else if (arg == L"--plugin-tab") options.pluginTab = std::clamp(_wtoi(next().c_str()),0,2);
         else if (arg == L"--page") options.page = _wtoi(next().c_str());

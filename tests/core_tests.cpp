@@ -46,6 +46,11 @@ int main(int argc,char** argv) {
         store.ingest("102.100 701 702 E Tag: quote \" tab\t UTF8 é");
         auto out=exportLogs({&store.entries().back()},true);check(out.find("\\\"")!=std::string::npos&&out.find("\\t")!=std::string::npos&&out.find("UTF8 é")!=std::string::npos,"JSON escaping and unicode");
         LogStore bounded(3);for(int i=0;i<5;++i)bounded.ingest("110.1 1 1 I Tag: "+std::to_string(i));check(bounded.entries().size()==3&&bounded.discarded()==2,"bounded ring");
+        auto revision=bounded.revision();bounded.setLimits(6,64*1024*1024);check(bounded.entries().size()==3&&bounded.entries().front().id==3&&bounded.discarded()==2&&bounded.revision()>revision,"growing retention preserves records and IDs");
+        bounded.ingest("110.2 1 1 I Tag: next");bounded.ingest("110.3 1 1 I Tag: last");check(bounded.entries().size()==5&&bounded.capacity()==6,"new retention takes effect without restarting capture");
+        bounded.setLimits(2,64*1024*1024);check(bounded.entries().size()==2&&bounded.entries().front().id==6&&bounded.discarded()==5,"shrinking retention immediately removes oldest records");
+        bounded.setLimits(2,1024);bounded.ingest("110.4 1 1 I Tag: "+std::string(5000,'x'));check(bounded.bytes()<=1024&&bounded.entries().empty()&&bounded.byteLimit()==1024,"runtime memory limit applies to oversized new records");
+        bounded.setLimits(10,65536);bounded.setPackages(packages);bounded.snapshot({{1,10001,"com.test.alpha"}},111);bounded.ingest("111.1 1 1 I Tag: after-resize");check(bounded.entries().back().package=="com.test.alpha"&&bounded.entries().back().id>7,"resizing preserves attribution and increasing record IDs");
         LogStore byteBound(100,1024);for(int i=0;i<10;++i)byteBound.ingest("111.1 1 1 I Tag: "+std::string(300,'x'));check(byteBound.bytes()<=1024&&byteBound.discarded()>0,"bounded bytes");
         byteBound.setPackages(packages);byteBound.snapshot({{1,10001,"com.test.alpha"}},110);check(byteBound.bytes()<=1024,"reattribution keeps memory bound");
         store.clear();store.ingest("103.1 701 702 I Tag: identity-after-clear");check(store.entries().size()==1&&store.entries()[0].package=="com.test.alpha","clear keeps attribution");store.reset();check(store.entries().empty()&&store.processes().empty(),"device reset");
@@ -53,6 +58,11 @@ int main(int argc,char** argv) {
             auto exe=widen(argv[1]);auto quoted=runProcess(exe,{"--echo","path with spaces","C:\\trailing\\","a\"b","é"});
             check(quoted.code==0&&quoted.output=="path with spaces\nC:\\trailing\\\na\"b\né\n","process argument quoting");
             auto timeout=runProcess(exe,{"--hang"},120);check(timeout.timedOut&&timeout.code!=0,"process cancellation");
+            auto unrelated=std::filesystem::current_path()/(L"handle-isolation-"+std::to_wstring(GetCurrentProcessId())+L".tmp");SECURITY_ATTRIBUTES inheritable{sizeof(inheritable),nullptr,TRUE};
+            auto file=CreateFileW(unrelated.c_str(),GENERIC_WRITE,FILE_SHARE_READ|FILE_SHARE_WRITE,&inheritable,CREATE_NEW,FILE_ATTRIBUTE_NORMAL,nullptr);check(file!=INVALID_HANDLE_VALUE,"fresh inheritable handle fixture");
+            std::atomic<bool> ready{false},cancelHold{false};std::thread held([&]{runProcess(exe,{"--hold"},10000,&cancelHold,[&](const std::string& chunk){if(chunk.find("ready")!=std::string::npos)ready=true;});});
+            auto handleDeadline=std::chrono::steady_clock::now()+std::chrono::seconds(3);while(!ready&&std::chrono::steady_clock::now()<handleDeadline)std::this_thread::sleep_for(std::chrono::milliseconds(5));
+            CloseHandle(file);bool isolated=DeleteFileW(unrelated.c_str())!=FALSE;cancelHold=true;held.join();std::error_code cleanupError;std::filesystem::remove(unrelated,cleanupError);check(ready&&isolated,"background ADB cannot inherit and lock unrelated local files");
             std::string parseError;auto arguments=parseCommand("pull \"/sdcard/a file.txt\" \"C:\\My Files\\a.txt\"",parseError);
             check(parseError.empty()&&arguments.size()==3&&arguments[2]=="C:\\My Files\\a.txt","terminal argument parser keeps paths");
             parseCommand("shell 'unfinished",parseError);check(!parseError.empty(),"terminal rejects unfinished quote");

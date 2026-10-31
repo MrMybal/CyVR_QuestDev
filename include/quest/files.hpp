@@ -11,6 +11,7 @@ struct RemoteFile {
     char type{'o'};
     std::optional<uint64_t> size;
     std::optional<int64_t> modified;
+    bool hidden{};
 };
 struct RemoteListing {std::vector<RemoteFile> entries;bool truncated{};};
 std::string remotePath(const std::string& path);

@@ -24,6 +24,7 @@ int wmain(int argc,wchar_t** argv) {
     if(a.empty())return 1;
     if(a[0]=="--echo"){for(size_t i=1;i<a.size();++i)std::cout<<a[i]<<"\n";return 0;}
     if(a[0]=="--hang"){Sleep(10000);return 0;}
+    if(a[0]=="--hold"){std::cout<<"ready\n"<<std::flush;Sleep(10000);return 0;}
     if(a[0]=="devices"){std::cout<<"List of devices attached\nFAKE-QUEST\tdevice product:hollywood model:Quest_3 device:hollywood transport_id:1\n";return 0;}
     if(a[0]=="connect"){std::cout<<"connected to "<<a.back()<<"\n";return 0;}
     if(a.size()<3 || a[0]!="-s" || a[1]!="FAKE-QUEST")return 2;
