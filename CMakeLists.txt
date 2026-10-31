@@ -19,6 +19,8 @@ endif()
 if(NOT WIN32)
     message(FATAL_ERROR "CyVR QuestDev requires Windows (Win32 / DirectX 11).")
 endif()
+enable_language(RC)
+configure_file(src/resources.rc.in "${CMAKE_BINARY_DIR}/quest_resources.rc" @ONLY)
 set(CYUI_ROOT "$ENV{CYUI_ROOT}" CACHE PATH "CyImgui_Interface source directory")
 if(NOT CYUI_ROOT)
     foreach(parent ".." "../.." "../../..")
@@ -41,13 +43,19 @@ add_library(quest_backend STATIC src/backend.cpp src/plugins.cpp src/metrics_plu
 target_link_libraries(quest_backend PUBLIC quest_core user32)
 target_include_directories(quest_backend PUBLIC include third_party)
 add_executable(CyVR_QuestDev WIN32 src/main.cpp src/app.cpp src/preview.cpp src/assistant_bridge.cpp src/metrics_view.cpp
+    "${CMAKE_BINARY_DIR}/quest_resources.rc"
     "${IMGUI_DIR}/backends/imgui_impl_win32.cpp"
     "${IMGUI_DIR}/backends/imgui_impl_dx11.cpp")
 target_include_directories(CyVR_QuestDev PRIVATE "${IMGUI_DIR}/backends" third_party)
 target_link_libraries(CyVR_QuestDev PRIVATE quest_backend CyUI::CyUI d3d11 dxgi d3dcompiler dwmapi shell32 comdlg32 ole32 windowscodecs)
 add_custom_command(TARGET CyVR_QuestDev POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/plugins" "$<TARGET_FILE_DIR:CyVR_QuestDev>/plugins")
 set_property(TARGET CyVR_QuestDev APPEND PROPERTY LINK_DEPENDS
-    "${CMAKE_SOURCE_DIR}/LICENSE" "${CMAKE_SOURCE_DIR}/COPYRIGHT" "${CMAKE_SOURCE_DIR}/THIRD_PARTY.md")
+    "${CMAKE_SOURCE_DIR}/LICENSE" "${CMAKE_SOURCE_DIR}/COPYRIGHT" "${CMAKE_SOURCE_DIR}/THIRD_PARTY.md"
+    "${CMAKE_SOURCE_DIR}/assets/branding/cyvr-questdev-logo-gradient.png"
+    "${CMAKE_SOURCE_DIR}/assets/branding/cyvr-questdev.ico")
+set_property(SOURCE "${CMAKE_BINARY_DIR}/quest_resources.rc" APPEND PROPERTY OBJECT_DEPENDS
+    "${CMAKE_SOURCE_DIR}/assets/branding/cyvr-questdev-logo-gradient.png"
+    "${CMAKE_SOURCE_DIR}/assets/branding/cyvr-questdev.ico")
 add_custom_command(TARGET CyVR_QuestDev POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/LICENSE" "$<TARGET_FILE_DIR:CyVR_QuestDev>/LICENSE.txt"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/COPYRIGHT" "$<TARGET_FILE_DIR:CyVR_QuestDev>/COPYRIGHT.txt"

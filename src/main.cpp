@@ -6,6 +6,7 @@
 
 #include <cyui/CyUI.h>
 #include "quest/app.hpp"
+#include "quest/resources.h"
 
 #include <imgui.h>
 #include <imgui_impl_dx11.h>
@@ -230,6 +231,8 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 
     WNDCLASSEXW wc { sizeof(wc), CS_CLASSDC, windowProc, 0L, 0L, GetModuleHandle(nullptr), nullptr, nullptr, nullptr, nullptr,
                      L"CyVRQuestDev02", nullptr };
+    wc.hIcon=static_cast<HICON>(LoadImageW(wc.hInstance,MAKEINTRESOURCEW(IDI_QUESTDEV_APP),IMAGE_ICON,GetSystemMetrics(SM_CXICON),GetSystemMetrics(SM_CYICON),LR_SHARED));
+    wc.hIconSm=static_cast<HICON>(LoadImageW(wc.hInstance,MAKEINTRESOURCEW(IDI_QUESTDEV_APP),IMAGE_ICON,GetSystemMetrics(SM_CXSMICON),GetSystemMetrics(SM_CYSMICON),LR_SHARED));
     ::RegisterClassExW(&wc);
     const auto hwnd = ::CreateWindowW(wc.lpszClassName, L"CyVR QuestDev", WS_OVERLAPPEDWINDOW, 100, 100,
                                       static_cast<int>(1440 * dpiScale), static_cast<int>(900 * dpiScale), nullptr, nullptr,

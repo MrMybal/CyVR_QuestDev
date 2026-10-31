@@ -1,5 +1,9 @@
 # Validation
 
+## Alpha 0.6.0-2 — identité de l’application
+
+Validation du 31 octobre 2026 : build Release réussi, logo affiché dans les cinq thèmes (inspection navy et light-grey), PNG embarqué identique à l’asset approuvé et groupe d’icônes Windows en dix résolutions. Une fenêtre réelle expose les icônes grande et petite. Les 178 contrôles C++ existants passent. Le README utilise le même PNG et une capture de démonstration actualisée.
+
 ## Version 0.6 — mirroring vidéo/audio
 
 Validation du 30 octobre 2026, build Release Windows x64.

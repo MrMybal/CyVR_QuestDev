@@ -9,6 +9,7 @@
 #include "quest/metrics_plugins.hpp"
 #include "quest/metrics_view.hpp"
 #include "quest/mirroring.hpp"
+#include "quest/resources.h"
 #include <cyui/CyUI.h>
 #include <imgui.h>
 #define WIN32_LEAN_AND_MEAN
@@ -108,6 +109,7 @@ struct App::Impl {
     std::vector<uint64_t> taskOrder;
     uint64_t selectedTask{},infoTask{},recordTask{};
     std::unique_ptr<Preview> preview;
+    std::unique_ptr<Preview> appLogo;
     std::unique_ptr<Mirroring> videoMirror;
     MirrorOptions mirrorDraft;
     bool mirrorSetup{},mirrorCrop{};
@@ -164,6 +166,7 @@ struct App::Impl {
         }
         auto a=narrow(adb);strncpy_s(adbField.data(),adbField.size(),a.c_str(),_TRUNCATE);
         preview=std::make_unique<Preview>(options.graphicsDevice);reloadPlugins();
+        appLogo=std::make_unique<Preview>(options.graphicsDevice);std::string logoError;if(!appLogo->loadResource(IDR_QUESTDEV_LOGO,logoError))cyui::notify(logoError.c_str(),cyui::Tone::error);
         videoMirror=std::make_unique<Mirroring>();mirrorSetup=options.mirrorSetup;
         mirrorEngine=options.scrcpy.empty()?(productRoot()/L"runtime/mirror/scrcpy.exe").wstring():options.scrcpy;
         metrics=std::make_unique<MetricsView>(userRoot(),options.demo);
@@ -491,8 +494,9 @@ struct App::Impl {
     }
     void topbar() {
         if(cyui::beginTopBar("##top",cyui::dp(62))) {
+            if(appLogo->texture()){ImGui::Image(static_cast<ImTextureID>(appLogo->texture()),cyui::dp(44,44));ImGui::SameLine(0,cyui::dp(10));}
             ImGui::BeginGroup();cyui::heading("CyVR QuestDev",2);cyui::textFaint("OUTILS DÉVELOPPEUR / META QUEST");ImGui::EndGroup();
-            ImGui::SameLine(0,cyui::dp(44));
+            ImGui::SameLine(0,cyui::dp(16));
             const char* pages[]={"Console","Applications","Réglages","Appareil","ADB","Plugins","Assistant IA","Fichiers","Métriques"};cyui::segmented("##pages",pages,9,&page,cyui::dp(740));
             ImGui::SameLine();cyui::alignRight(cyui::dp(300));
             ImGui::SetNextItemWidth(cyui::dp(255));

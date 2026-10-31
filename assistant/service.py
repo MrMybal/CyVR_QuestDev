@@ -272,7 +272,10 @@ def main():
                     conversation.run(kind,message)
             except Exception as exc:emit('error',message=conversation.redactor.clean(str(exc)))
     finally:
-        host.close();conversation.close();server.shutdown();server.server_close();runtime.close();connection.unlink(missing_ok=True)
+        # Retire discovery before draining workers: the native shutdown deadline
+        # must never leave a connection pointing to a runtime being closed.
+        connection.unlink(missing_ok=True)
+        host.close();conversation.close();server.shutdown();server.server_close();runtime.close()
 
 
 if __name__=='__main__':

@@ -15,7 +15,7 @@ import zipfile
 from setup_mirroring import validate as validate_mirroring, RUNTIME_FILES, SOURCES
 
 ROOT=Path(__file__).resolve().parents[1]
-VERSION='0.6.0-alpha.1'
+VERSION='0.6.0-alpha.2'
 PYTHON_VERSION='3.13.17'
 PYTHON_URL=f'https://www.python.org/ftp/python/{PYTHON_VERSION}/python-{PYTHON_VERSION}-embeddable-amd64.zip'
 PYTHON_SHA256='0ba1ee4bfcbdc3a559d27e2e9ce76d04a7839947a23f46375872c755c0d463b8'
@@ -93,7 +93,7 @@ def package(output,cyui):
     product=output/f'CyVR_QuestDev-{VERSION}-Windows-x64';product.mkdir()
     copy(ROOT/'build/windows/CyVR_QuestDev.exe',product/'CyVR_QuestDev.exe')
     for name in tracked:
-        include=(name.startswith(('assistant/','plugins/','docs/','examples/','LICENCES/','licenses/')) and not name.startswith('assistant/tests/')) or name in {'README.md','THIRD_PARTY.md','runtime/requirements.lock'}
+        include=(name.startswith(('assistant/','plugins/','docs/','examples/','LICENCES/','licenses/')) and not name.startswith('assistant/tests/')) or (name.startswith('assets/branding/') and Path(name).suffix in {'.png','.ico'}) or name in {'README.md','THIRD_PARTY.md','runtime/requirements.lock'}
         if include:copy(ROOT/name,product/name)
     for source,target in [('LICENSE','LICENSE.txt'),('COPYRIGHT','COPYRIGHT.txt')]:copy(ROOT/source,product/target)
     prepare_runtime(product,ROOT/'build/release-cache')

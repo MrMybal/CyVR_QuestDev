@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/branding/cyvr-questdev-logo-gradient.png" alt="Logo CyVR QuestDev" width="160">
+</p>
+
 # CyVR QuestDev 0.6
 
 Outils de développement pour Meta Quest, en C++17, Win32 et DirectX 11, avec l’interface **CyUI / CyImgui_Interface**.
