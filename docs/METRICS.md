@@ -13,6 +13,10 @@ La page **Métriques** trace les colonnes présentes dans les CSV produits par O
 
 On peut aussi **Actualiser les rapports OVR**, choisir un CSV du casque, puis activer **Suivre les écritures CSV**. Le suivi interroge le dossier chaque seconde, mais la cadence réelle dépend des écritures et du flush d’OVR. Une ligne encore incomplète attend sa fin avant d’être tracée. Un firmware qui ne rend ses CSV disponibles qu’à la fin d’une session ne fournit pas de courbes en direct par cette voie.
 
+La page actualise les rapports à son ouverture sur un casque connecté et ouvre le plus récent si aucune session n’est déjà affichée. La recherche couvre `/sdcard/Android/data/com.oculus.ovrmonitormetricsservice/files/CapturedMetrics` et l’ancien `/sdcard/OVRMonitorMetricsService/CapturedMetrics`, avec quatre niveaux de fichiers et sous-dossiers. Les refus d’accès et les listes incomplètes sont signalés comme erreurs.
+
+Si aucun rapport n’arrive, un diagnostic vérifie le mode CSV et la sélection de statistiques dans OVR. **Configurer OVR** ouvre directement le plugin pour choisir les métriques, puis appliquer les réglages. Le CSV est un rapport de session VR ; son activation ne garantit pas qu’un fichier soit immédiatement publié pendant une application déjà ouverte. Le suivi conserve le rapport le plus récent lorsque plusieurs fichiers changent.
+
 QuestDev ne lance pas d’application VR et ne change pas le HUD ou le profilage GPU pour enregistrer. Sans rapport produit par OVR, la session indique qu’aucun CSV n’a été reçu. Certains compteurs peuvent manquer selon le casque, le firmware, l’application et le profilage activé. Les réglages correspondants restent dans **Appareil** et le plugin **OVR Metrics Tool**.
 
 ## Lire les courbes

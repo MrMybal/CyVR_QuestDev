@@ -206,6 +206,9 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
         else if (arg == L"--theme") themeKey = quest::narrow(next());
         else if (arg == L"--demo") options.demo = true;
         else if (arg == L"--compare") options.compare = true;
+        else if (arg == L"--log-raw") options.logRaw = true;
+        else if (arg == L"--log-sort") options.logSort = std::clamp(_wtoi(next().c_str()),0,5);
+        else if (arg == L"--log-descending") options.logDescending = true;
         else if (arg == L"--adb") options.adb = next();
         else if (arg == L"--package") options.package = quest::narrow(next());
         else if (arg == L"--plugin") options.plugin = quest::narrow(next());

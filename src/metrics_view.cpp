@@ -25,7 +25,7 @@ std::filesystem::path csvDialog(bool save){wchar_t path[32768]{};if(save)wcscpy_
 std::string number(double value,const std::string& unit={}){if(!std::isfinite(value))return "Indisponible";char buffer[96];std::snprintf(buffer,sizeof(buffer),"%.4g%s%s",value,unit.empty()?"":" ",unit.c_str());return buffer;}
 }
 struct MetricsView::Impl {
-    MetricsCapture monitor;std::filesystem::path root;bool demo{};
+    MetricsCapture monitor;std::filesystem::path root;bool demo{},configureRequest{},refreshed{};uint64_t refreshedSession{};
     std::set<std::string> selected;std::array<char,256> filter{};std::string lastSchema,report;
     std::vector<std::pair<MetricsTicket,std::string>> pending;
     double start{},end{1},cursor{};bool autoRange{true},pinned{};
@@ -72,17 +72,22 @@ void MetricsView::sidebar(){
 }
 void MetricsView::draw(){
     auto& v=*impl_;v.tick();auto state=v.monitor.state();v.sync(state);bool busy=state.busy||!v.pending.empty();
+    if(!state.online)v.refreshed=false;
+    if(state.online&&!v.demo&&(!v.refreshed||v.refreshedSession!=state.deviceSession)){v.refreshed=true;v.refreshedSession=state.deviceSession;v.request("refresh_reports");busy=true;}
     cyui::panelHeader("Courbes et enregistrements OVR","Toutes les colonnes disponibles du CSV, une base de temps commune et des sessions sauvegardées sur PC.");cyui::space(10);
-    {cyui::ScopedDisabled disabled(busy||state.recording||v.demo);if(cyui::primaryButton("Enregistrer sur PC")){std::filesystem::create_directories(v.root);auto folder=v.root/(L"Session-"+std::to_wstring(GetTickCount64()));v.request("start_record",folder);}}
+    {cyui::ScopedDisabled disabled(busy||state.recording||v.demo||!state.online);if(cyui::primaryButton("Enregistrer sur PC")){std::filesystem::create_directories(v.root);auto folder=v.root/(L"Session-"+std::to_wstring(GetTickCount64()));v.request("start_record",folder);}}
     ImGui::SameLine();{cyui::ScopedDisabled disabled(busy||!state.recording);if(cyui::button("Arrêter"))v.request("stop_record");}
     ImGui::SameLine();if(cyui::button("Ouvrir un CSV…")){auto path=csvDialog(false);if(!path.empty())v.request("open_csv",path);}
     ImGui::SameLine();{cyui::ScopedDisabled disabled(!state.data||busy);if(cyui::button("Exporter le CSV…")){auto path=csvDialog(true);if(!path.empty())v.request("export_csv",path);}}
     ImGui::SameLine();if(cyui::ghostButton("Dossier des sessions")){std::filesystem::create_directories(v.root);ShellExecuteW(nullptr,L"open",v.root.c_str(),nullptr,nullptr,SW_SHOWNORMAL);}
+    ImGui::SameLine();if(cyui::ghostButton("Configurer OVR"))v.configureRequest=true;
     cyui::space(8);{cyui::ScopedDisabled disabled(busy||v.demo);if(cyui::iconButton(cyui::icon::refresh,"Actualiser les rapports OVR du Quest"))v.request("refresh_reports");}ImGui::SameLine();
-    ImGui::SetNextItemWidth(cyui::dp(450));if(ImGui::BeginCombo("##remoteMetrics",v.report.empty()?"Rapports CSV sur le Quest":v.report.c_str())){for(const auto& report:state.reports){if(ImGui::Selectable(report.name.c_str(),v.report==report.path)){v.report=report.path;v.request("open_report",{},report.path);}}if(state.reports.empty())cyui::textFaint("Aucun rapport. Actualisez ou démarrez un enregistrement.");ImGui::EndCombo();}
+    ImGui::SetNextItemWidth(cyui::dp(450));if(ImGui::BeginCombo("##remoteMetrics",state.remote.empty()?"Rapports CSV sur le Quest":state.remote.c_str())){for(const auto& report:state.reports){ImGui::PushID(report.path.c_str());if(ImGui::Selectable(report.name.c_str(),state.remote==report.path)){v.report=report.path;v.request("open_report",{},report.path);}cyui::tooltip(report.path.c_str());ImGui::PopID();}if(state.reports.empty())cyui::textFaint("Aucun rapport. Actualisez ou démarrez un enregistrement.");ImGui::EndCombo();}
     ImGui::SameLine();{cyui::ScopedDisabled disabled(busy||state.remote.empty()||v.demo);bool follow=state.follow;if(cyui::toggleSwitch("Suivre les écritures CSV",&follow))v.request(follow?"follow_report":"pause",{},state.remote);}
     if(state.recording){cyui::space(6);cyui::badge("ENREGISTREMENT",cyui::Tone::error);ImGui::SameLine();cyui::textDim("%zu rapport(s) · %s",state.savedFiles,state.ownsCsv?"CSV activé par QuestDev":"Mode CSV déjà actif, conservé à l’arrêt");}
     if(busy)cyui::progressBar(-1,ImVec2(-1,cyui::dp(4)));if(!state.error.empty())cyui::callout(cyui::Tone::error,state.error.c_str());else if(!state.status.empty())cyui::textDim("%s",state.status.c_str());
+    if(!state.diagnostic.empty())cyui::callout(cyui::Tone::warning,state.diagnostic.c_str());
+    if(!state.reportDirectories.empty()){cyui::textFaint("%zu dossier(s) OVR détecté(s) · rapports des sous-dossiers inclus",state.reportDirectories.size());cyui::tooltip([&]{std::string text;for(const auto& directory:state.reportDirectories)text+=directory+'\n';return text;}().c_str());}
     if(!state.data||state.data->times.empty()){cyui::space(20);cyui::emptyState("Aucun échantillon à tracer","Ouvrez un CSV OVR ou enregistrez une session pendant que votre application VR tourne. QuestDev ne lance pas de jeu.",cyui::icon::clock);return;}
     cyui::space(6);cyui::textDim("%s · %zu lignes · %.3f s",state.data->name.c_str(),state.data->times.size(),state.data->times.back());cyui::textFaint("Temps relatif au premier timestamp CSV · molette : zoom · bouton central : déplacer");
     if(cyui::iconButton(cyui::icon::zoomIn,"Afficher toute la session (double clic sur une courbe)"))v.autoRange=true;ImGui::SameLine();if(cyui::ghostButton(v.pinned?"Libérer le curseur":"Curseur libre"))v.pinned=false;ImGui::SameLine();cyui::textMono("Curseur %.3f s · plage %.3f → %.3f s",v.cursor,v.start,v.end);
@@ -91,4 +96,5 @@ void MetricsView::draw(){
     ImGui::BeginChild("##metricsPlots");float height=cyui::dp(148),spacing=cyui::dp(8);ImGuiListClipper clipper;clipper.Begin(int(columns.size()),height+spacing+2*ImGui::GetStyle().ItemSpacing.y);while(clipper.Step())for(int i=clipper.DisplayStart;i<clipper.DisplayEnd;++i){v.plot(state,columns[size_t(i)],height);ImGui::Dummy(ImVec2(0,spacing));}ImGui::EndChild();
 }
 nlohmann::json MetricsView::describe()const{auto result=impl_->monitor.describe();result["selectedMetrics"]=impl_->selected;result["range"]={{"start",impl_->start},{"end",impl_->end}};result["cursor"]=impl_->cursor;return result;}
+bool MetricsView::takeConfigureRequest(){bool value=impl_->configureRequest;impl_->configureRequest=false;return value;}
 }

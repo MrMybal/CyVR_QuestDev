@@ -9,6 +9,7 @@
 #include "quest/file_workspace.hpp"
 #include "quest/metrics_plugins.hpp"
 #include "quest/metrics_view.hpp"
+#include "quest/log_view.hpp"
 #include "quest/mirroring.hpp"
 #include "quest/resources.h"
 #include "quest/version.hpp"
@@ -70,10 +71,14 @@ struct View {
     std::string package;
     std::array<char,256> search{}, exclude{}, tag{};
     int minimum{0},pid{};
-    bool follow{true},paused{},events{};
+    bool follow{true},paused{},events{},rawMode{},rawTail{true},rawSelected{};
     uint64_t freeze{},selected{},revision{~uint64_t(0)};
     float lastScroll{-1};
-    bool dirty{true};
+    uint64_t rawRevision{~uint64_t(0)},rawAnchor{};
+    std::string rawText;
+    size_t rawFirst{},rawEnd{};
+    std::vector<LogSort> sort{{LogColumn::time,false}};
+    bool dirty{true},rawInvalidate{true};
     std::vector<uint64_t> ids;
 };
 struct Counts { int lines{},errors{},warnings{},processes{}; };
@@ -188,6 +193,7 @@ struct App::Impl {
         else if(isFile((productRoot()/L"runtime/python/Scripts/python.exe").wstring()))startAssistant();
         if(options.updatesSettings)settingsSection=1;
         if(options.logSettings)settingsSection=2;
+        view.rawMode=second.rawMode=options.logRaw;view.sort=second.sort={{LogColumn(options.logSort),options.logDescending}};
         if(!options.demo){updateBridge=std::make_unique<AssistantBridge>();std::string error;if(!updateBridge->start((productRoot()/L"runtime/python/Scripts/python.exe").wstring(),(productRoot()/L"updater/service.py").wstring(),(userRoot()/L"updates").wstring(),error))updateState["error"]="Le runtime de mise à jour n’est pas disponible. Utilisez une archive portable complète.";}
     }
     ~Impl(){if(updateBridge)updateBridge->stop();if(updateInstaller)CloseHandle(updateInstaller);SecureZeroMemory(updateToken.data(),updateToken.size());videoMirror.reset();metrics.reset();backend.reset();files.reset();if(assistant)assistant->stop();}
@@ -483,15 +489,18 @@ struct App::Impl {
     }
     void updateView(View& v) {
         if(!v.dirty && v.revision==store.revision())return;
+        if(v.dirty)v.rawInvalidate=true;
         LogFilter filter;filter.text=lower(v.search.data());filter.exclude=lower(v.exclude.data());filter.tag=lower(v.tag.data());filter.minimum=v.minimum;filter.pid=v.pid;filter.hideLifecycle=!v.events;
         filter.onlyUnassigned=v.package=="@system";if(!v.package.empty() && !filter.onlyUnassigned)filter.packages.insert(v.package);
         v.ids.clear();for(const auto& e:store.entries())if((!v.paused || e.id<=v.freeze) && filter.matches(e))v.ids.push_back(e.id);
-        v.dirty=false;v.revision=store.revision();
+        if(!v.rawMode)std::sort(v.ids.begin(),v.ids.end(),[&](auto a,auto b){return logLess(*find(a),*find(b),v.sort);});
+        v.dirty=false;v.revision=store.revision();v.rawRevision=~uint64_t(0);
     }
     std::vector<const LogEntry*> visible(View& v) { updateView(v);std::vector<const LogEntry*> out;for(auto id:v.ids)if(auto* e=find(id))out.push_back(e);return out; }
+    std::string viewText(View& v,bool jsonl=false){auto entries=visible(v);if(jsonl||!v.rawMode)return exportLogs(entries,jsonl);std::string text;for(auto* e:entries){text+=rawLog(*e);text+='\n';}return text;}
     void exportView(View& v,bool jsonl) {
         auto path=fileDialog(true,jsonl?L"JSON Lines (*.jsonl)\0*.jsonl\0\0":L"Journal texte (*.log)\0*.log\0\0",jsonl?L"jsonl":L"log",jsonl?L"questdev.jsonl":L"questdev.log");
-        if(path.empty())return;auto entries=visible(v);std::ofstream out(path,std::ios::binary);out<<exportLogs(entries,jsonl);out.close();
+        if(path.empty())return;std::ofstream out(path,std::ios::binary);out<<viewText(v,jsonl);out.close();
         cyui::notify(out?"Journal exporté":"Échec de l’export",out?cyui::Tone::success:cyui::Tone::error);
     }
     void pause(View& v) { v.paused=!v.paused;if(v.paused)v.freeze=store.entries().empty()?0:store.entries().back().id;v.dirty=true; }
@@ -596,7 +605,7 @@ struct App::Impl {
         ImGui::SameLine();if(cyui::iconButton(cyui::icon::download,"Exporter la vue filtrée (Ctrl+S)"))ImGui::OpenPopup("##export");
         if(ImGui::BeginPopup("##export")){if(ImGui::MenuItem("Texte (.log)"))exportView(v,false);if(ImGui::MenuItem("JSON Lines (.jsonl)"))exportView(v,true);ImGui::EndPopup();}
         if(!compact) {
-            ImGui::SameLine();if(cyui::iconButton(cyui::icon::copy,"Copier les lignes visibles (Ctrl+Maj+C)"))ImGui::SetClipboardText(exportLogs(visible(v),false).c_str());
+            ImGui::SameLine();if(cyui::iconButton(cyui::icon::copy,"Copier toutes les lignes filtrées (Ctrl+Maj+C)"))ImGui::SetClipboardText(viewText(v).c_str());
             ImGui::SameLine();if(cyui::iconButton(cyui::icon::trash,"Vider le journal local (Ctrl+L)")){store.clear();detail.reset();}
         }
         ImGui::SameLine();if(cyui::iconButton(cyui::icon::filter,"Filtres avancés (clic)",v.exclude[0]||v.tag[0]||v.pid>0||v.events))ImGui::OpenPopup("##filters");
@@ -615,28 +624,53 @@ struct App::Impl {
         }
         ImGui::PopID();
     }
+    void rawLogs(View& v,float footer){
+        if(v.rawInvalidate){clearRawLogSelection();v.rawInvalidate=false;v.rawTail=true;v.rawRevision=~uint64_t(0);v.lastScroll=-1;}
+        bool selected=rawLogSelection();
+        auto rebuild=[&]{
+            v.rawEnd=v.ids.size();if(!v.rawTail){auto end=std::upper_bound(v.ids.begin(),v.ids.end(),v.rawAnchor);v.rawEnd=size_t(end-v.ids.begin());}
+            v.rawFirst=v.rawEnd;size_t bytes=0;
+            while(v.rawFirst>0&&v.rawEnd-v.rawFirst<10000){auto* e=find(v.ids[v.rawFirst-1]);if(!e)break;auto n=rawLog(*e).size()+1;if(bytes+n>2*1024*1024&&bytes)break;bytes+=n;--v.rawFirst;}
+            v.rawText.clear();v.rawText.reserve(bytes);for(size_t i=v.rawFirst;i<v.rawEnd;++i)if(auto* e=find(v.ids[i])){v.rawText+=rawLog(*e);v.rawText+='\n';}
+            v.rawRevision=store.revision();
+        };
+        if(!selected&&v.rawRevision!=store.revision())rebuild();
+        {cyui::ScopedDisabled disabled(v.rawFirst==0||selected);if(cyui::button("Précédentes")){v.rawTail=false;v.rawAnchor=v.ids[v.rawFirst-1];v.follow=false;v.lastScroll=-1;rebuild();}}
+        ImGui::SameLine();{cyui::ScopedDisabled disabled(v.rawEnd>=v.ids.size()||selected);if(cyui::button("Suivantes")){size_t end=v.rawEnd,bytes=0;while(end<v.ids.size()&&end-v.rawEnd<10000){auto* entry=find(v.ids[end]);if(!entry)break;auto n=rawLog(*entry).size()+1;if(bytes+n>2*1024*1024&&bytes)break;bytes+=n;++end;}v.rawTail=end==v.ids.size();if(end)v.rawAnchor=v.ids[end-1];v.lastScroll=-1;rebuild();}}
+        ImGui::SameLine();cyui::textFaint("RAW %zu–%zu / %zu",v.rawEnd?v.rawFirst+1:0,v.rawEnd,v.ids.size());ImGui::SameLine();cyui::helpMarker("Sélection à la souris, Ctrl+A pour la page, Ctrl+C pour copier. Les boutons Copier et Exporter incluent toute la vue filtrée.");
+        if(selected){ImGui::SameLine();if(cyui::ghostButton("Libérer la sélection")){clearRawLogSelection();v.rawRevision=~uint64_t(0);}}
+        cyui::ScopedFont font(cyui::monoFont());v.rawSelected=drawRawLog(v.rawText,v.follow,v.paused,v.lastScroll,ImVec2(-1,-footer),cyui::dp(2));
+        if(v.follow&&!v.rawTail){v.rawTail=true;v.rawRevision=~uint64_t(0);}
+        if(!v.follow&&v.rawTail&&v.rawEnd){v.rawTail=false;v.rawAnchor=v.ids[v.rawEnd-1];}
+    }
     void logTable(View& v,bool compact) {
         ImGui::PushID(&v);updateView(v);
         auto title=v.package.empty()?"Tous les messages":v.package=="@system"?"Système / non attribué":v.package;
         cyui::textDim("%s",title.c_str());
+        ImGui::SameLine();const char* modes[]={"Colonnes","RAW"};int mode=v.rawMode?1:0;
+        if(cyui::segmented("##logMode",modes,2,&mode,cyui::dp(160))){v.rawMode=mode==1;v.dirty=true;v.lastScroll=-1;v.rawTail=true;updateView(v);}
+        cyui::tooltip("RAW : texte Logcat original sélectionnable. Colonnes : cliquer un en-tête pour trier, Maj pour combiner les tris.");
         toolbar(v,compact);
         if(v.paused)cyui::callout(cyui::Tone::warning,"Affichage en pause · la capture continue. Le tampon reste limité.");
         bool wasFollowing=v.follow;
-        auto flags=ImGuiTableFlags_ScrollY|ImGuiTableFlags_ScrollX|ImGuiTableFlags_RowBg|ImGuiTableFlags_BordersInnerV|ImGuiTableFlags_Resizable|ImGuiTableFlags_Reorderable|ImGuiTableFlags_Hideable;
+        auto flags=ImGuiTableFlags_ScrollY|ImGuiTableFlags_ScrollX|ImGuiTableFlags_RowBg|ImGuiTableFlags_BordersInnerV|ImGuiTableFlags_Resizable|ImGuiTableFlags_Reorderable|ImGuiTableFlags_Hideable|ImGuiTableFlags_Sortable|ImGuiTableFlags_SortMulti;
         float footer=ImGui::GetFrameHeightWithSpacing();
         if(v.ids.empty()) {
             ImGui::BeginChild("##empty",ImVec2(0,-footer));
             cyui::emptyState(store.entries().empty()?"En attente de messages":"Aucun message avec ces filtres",store.entries().empty()?(online?"Lancez une application sur le casque. Les messages apparaîtront ici.":"Branchez le Quest en USB, activez le mode développeur et acceptez le débogage dans le casque."):"Modifiez la recherche, la sévérité ou l’application sélectionnée.",cyui::icon::document);
             ImGui::EndChild();
-        } else if(ImGui::BeginTable("##log",compact?5:6,flags,ImVec2(0,-footer))) {
+        } else if(v.rawMode)rawLogs(v,footer);
+        else if(ImGui::BeginTable("##log",compact?5:6,flags,ImVec2(0,-footer))) {
             ImGui::TableSetupScrollFreeze(0,1);
-            ImGui::TableSetupColumn("Heure locale",ImGuiTableColumnFlags_WidthFixed,cyui::dp(104));
-            ImGui::TableSetupColumn("Niv.",ImGuiTableColumnFlags_WidthFixed,cyui::dp(36));
-            ImGui::TableSetupColumn("PID / TID",ImGuiTableColumnFlags_WidthFixed,cyui::dp(85));
-            if(!compact)ImGui::TableSetupColumn("Application",ImGuiTableColumnFlags_WidthFixed,cyui::dp(160));
-            ImGui::TableSetupColumn("Tag",ImGuiTableColumnFlags_WidthFixed,cyui::dp(compact?100.0f:135.0f));
-            ImGui::TableSetupColumn("Message",ImGuiTableColumnFlags_WidthFixed,cyui::dp(compact?620.0f:950.0f));
+            auto columnFlags=[&](LogColumn column){return ImGuiTableColumnFlags_WidthFixed|(int(column)==options.logSort?ImGuiTableColumnFlags_DefaultSort|(options.logDescending?ImGuiTableColumnFlags_PreferSortDescending:0):0);};
+            ImGui::TableSetupColumn("Heure locale",columnFlags(LogColumn::time),cyui::dp(104),unsigned(LogColumn::time));
+            ImGui::TableSetupColumn("Niv.",columnFlags(LogColumn::level),cyui::dp(36),unsigned(LogColumn::level));
+            ImGui::TableSetupColumn("PID / TID",columnFlags(LogColumn::pid),cyui::dp(85),unsigned(LogColumn::pid));
+            if(!compact)ImGui::TableSetupColumn("Application",columnFlags(LogColumn::application),cyui::dp(160),unsigned(LogColumn::application));
+            ImGui::TableSetupColumn("Tag",columnFlags(LogColumn::tag),cyui::dp(compact?100.0f:135.0f),unsigned(LogColumn::tag));
+            ImGui::TableSetupColumn("Message",columnFlags(LogColumn::message),cyui::dp(compact?620.0f:950.0f),unsigned(LogColumn::message));
             ImGui::TableHeadersRow();
+            if(auto* specs=ImGui::TableGetSortSpecs();specs&&specs->SpecsDirty){v.sort.clear();for(int i=0;i<specs->SpecsCount;++i){const auto& s=specs->Specs[i];v.sort.push_back({LogColumn(s.ColumnUserID),s.SortDirection==ImGuiSortDirection_Descending});}v.dirty=true;updateView(v);specs->SpecsDirty=false;v.lastScroll=-1;}
             {
             cyui::ScopedFont font(cyui::monoFont());
             ImGuiListClipper clipper;clipper.Begin(int(v.ids.size()));
@@ -654,13 +688,12 @@ struct App::Impl {
                 ImGui::PopID();
             }
             }
-            if(v.follow && v.lastScroll>=0 && ImGui::GetScrollY()+cyui::dp(1)<v.lastScroll)v.follow=false;
-            v.lastScroll=ImGui::GetScrollY();
-            if(ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows)&&ImGui::GetIO().MouseWheel>0)v.follow=false;
-            if(v.follow&&!v.paused)ImGui::SetScrollY(ImGui::GetScrollMaxY());
+            if(v.sort.size()==1&&v.sort[0].column==LogColumn::time&&!v.sort[0].descending)followLogViewport(v.follow,v.paused,v.lastScroll,cyui::dp(2));else v.follow=false;
             ImGui::EndTable();
         }
-        cyui::textFaint("%zu lignes",v.ids.size());ImGui::SameLine(0,cyui::dp(20));ImGui::Checkbox("Suivre le direct",&v.follow);
+        cyui::textFaint("%zu lignes",v.ids.size());ImGui::SameLine(0,cyui::dp(20));
+        {bool chronological=v.rawMode||(v.sort.size()==1&&v.sort[0].column==LogColumn::time&&!v.sort[0].descending);cyui::ScopedDisabled disabled(!chronological);if(cyui::toggleSwitch("Suivre le direct",&v.follow)&&v.follow){clearRawLogSelection();v.rawTail=true;v.rawRevision=~uint64_t(0);v.lastScroll=-1;}}
+        cyui::tooltip("Le suivi se suspend en remontant et reprend au retour en bas. En colonnes, triez par Heure locale croissante pour suivre le direct.");
         if(!wasFollowing&&v.follow)v.dirty=true;
         if(v.selected){ImGui::SameLine();if(cyui::ghostButton("Inspecter")){if(auto* e=find(v.selected))detail=*e;detailsOpen=true;}}
         ImGui::PopID();
@@ -1131,13 +1164,13 @@ struct App::Impl {
     }
     void frame() {
         tick();rebuildCounts();
-        if(!ImGui::GetIO().WantTextInput) {
+        if(!ImGui::GetIO().WantTextInput&&!ImGui::IsAnyItemActive()) {
             if(ImGui::IsKeyPressed(ImGuiKey_F5)&&backend)backend->refresh();
             if(page==0 && ImGui::IsKeyPressed(ImGuiKey_Space))pause(view);
             if(page==0 && ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_L)){store.clear();detail.reset();}
             if(page==0 && ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S))exportView(view,false);
             if(page==0 && ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_C)) {
-                if(ImGui::GetIO().KeyShift)ImGui::SetClipboardText(exportLogs(visible(view),false).c_str());
+                if(ImGui::GetIO().KeyShift)ImGui::SetClipboardText(viewText(view).c_str());
                 else if(auto* e=find(view.selected))ImGui::SetClipboardText(formatLog(*e).c_str());
             }
         }
@@ -1147,7 +1180,7 @@ struct App::Impl {
         if(ImGui::BeginTable("##workspaceSplit",2,ImGuiTableFlags_Resizable|ImGuiTableFlags_BordersInnerV)) {
             ImGui::TableSetupColumn("Applications",ImGuiTableColumnFlags_WidthFixed,cyui::dp(282));ImGui::TableSetupColumn("Main",ImGuiTableColumnFlags_WidthStretch);
             ImGui::TableNextColumn();ImGui::BeginChild("##sidebar");contextSidebar();ImGui::EndChild();
-            ImGui::TableNextColumn();ImGui::BeginChild("##main");if(page==0)console();else if(page==1)applications();else if(page==2)settings();else if(page==3)deviceActions();else if(page==4)terminal();else if(page==5)pluginPage();else if(page==7)filesPage();else if(page==8)metrics->draw();else assistantPage();ImGui::EndChild();
+            ImGui::TableNextColumn();ImGui::BeginChild("##main");if(page==0)console();else if(page==1)applications();else if(page==2)settings();else if(page==3)deviceActions();else if(page==4)terminal();else if(page==5)pluginPage();else if(page==7)filesPage();else if(page==8){metrics->draw();if(metrics->takeConfigureRequest()){for(size_t i=0;i<plugins.size();++i)if(plugins[i].id=="meta.ovr-metrics")selectedPlugin=int(i);page=5;options.pluginTab=0;pluginTabRequest=true;}}else assistantPage();ImGui::EndChild();
             ImGui::EndTable();
         }ImGui::End();if(floatingAssistant){ImGui::SetNextWindowSize(cyui::dp(850,750),ImGuiCond_FirstUseEver);if(ImGui::Begin("Discussion IA",&floatingAssistant))assistantPage();ImGui::End();}modals();cyui::renderNotifications();
     }
@@ -1161,6 +1194,7 @@ std::string App::diagnostics() const {
     for(const auto& [package,c]:impl_->counts)if(c.lines)out<<(package.empty()?"[system/unknown]":package)<<" lines="<<c.lines<<" errors="<<c.errors<<"\n";
     size_t selectedLines=0,foreign=0;for(const auto& e:impl_->store.entries()) {if(e.package==impl_->view.package)++selectedLines;}
     for(auto id:impl_->view.ids)if(auto* e=impl_->find(id))if(!impl_->view.package.empty() && impl_->view.package!="@system" && e->package!=impl_->view.package)++foreign;
+    out<<"log_raw="<<impl_->view.rawMode<<"\nlog_follow="<<impl_->view.follow<<"\nraw_bytes="<<impl_->view.rawText.size()<<"\n";
     out<<"log_max_lines="<<impl_->store.capacity()<<"\nlog_max_bytes="<<impl_->store.byteLimit()<<"\nfile_workspace="<<impl_->files->describe().dump()<<"\n";
     out<<"selected="<<impl_->view.package<<"\nselected_lines="<<selectedLines<<"\nvisible="<<impl_->view.ids.size()<<"\nforeign_visible="<<foreign<<"\nmodal_open="<<ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId|ImGuiPopupFlags_AnyPopupLevel)<<"\n";
     return out.str();

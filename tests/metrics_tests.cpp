@@ -3,6 +3,7 @@
 
 #include "quest/metrics_capture.hpp"
 #include "quest/metrics_plugins.hpp"
+#include "quest/files.hpp"
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <cmath>
@@ -18,6 +19,14 @@ template<class F>void rejects(F function,const char* name){bool rejected=false;t
 MetricsResult wait(MetricsTicket ticket,int seconds=12){if(ticket.result.wait_for(std::chrono::seconds(seconds))!=std::future_status::ready)throw std::runtime_error("Metrics worker timeout");return ticket.result.get();}
 void write(const std::filesystem::path& path,const std::string& data){std::ofstream output(path,std::ios::binary);output<<data;if(!output)throw std::runtime_error("Fixture write failed");}
 int main(int argc,char** argv){try{
+    auto framed=[](std::initializer_list<std::string> fields){std::string text;for(const auto& field:fields){text+=field;text+='\0';}return text;};
+    const std::string current="/sdcard/Android/data/com.oculus.ovrmonitormetricsservice/files/CapturedMetrics",legacy="/sdcard/OVRMonitorMetricsService/CapturedMetrics";
+    auto listing=parseMetricsReports(framed({"CYVROVR2","ROOT",legacy,"FILE","100","20",legacy+"/session/Quest.CSV","FILE","200","30",current+"/other.csv","END"}));
+    check(listing.reports.size()==2&&listing.reports[0].size==200&&listing.reports[1].name=="Quest.CSV","current, legacy, nested and uppercase OVR reports sorted newest first");
+    check(parseMetricsReports(framed({"CYVROVR2","DENIED",legacy,"END"})).denied.size()==1,"access denial distinguished from empty directory");
+    rejects([&]{parseMetricsReports(framed({"CYVROVR2","FILE","1","2",legacy+"/../../../outside.csv","END"}));},"report traversal rejected");
+    rejects([&]{parseMetricsReports(framed({"CYVROVR2","FILE","bad","2",legacy+"/a.csv","END"}));},"invalid report metadata rejected");
+    rejects([&]{parseMetricsReports("CYVROVR2");},"incomplete listing rejected");
     auto csv=parseMetricsCsv("\xef\xbb\xbfTime Stamp,average_frame_rate,custom,empty\r\n1000,90,-3,\r\n1500,80,2,N/A\r\n");
     check(csv.columns.size()==3&&csv.times.size()==2&&csv.times[1]==.5,"BOM, CRLF and millisecond time basis");
     check(csv.value(0,1)==-3&&std::isnan(csv.value(0,2))&&std::isnan(csv.value(1,2)),"negative custom metric preserved and unavailable not zero");
@@ -39,6 +48,18 @@ int main(int argc,char** argv){try{
     std::atomic<bool> cancelled{true};rejects([&]{parseMetricsCsv(many,false,&cancelled);},"CSV parser supports cancellation");
     auto demo=parseMetricsCsv(demoMetricsCsv());check(demo.times.size()==360&&demo.columns.size()==7,"demo uses same parser");
     auto base=std::filesystem::current_path()/("metrics-fixture-"+std::to_string(GetCurrentProcessId())+"-"+std::to_string(GetTickCount64()));std::filesystem::create_directories(base);
+    if(argc==3){
+        auto primary=base/L"current OVR",old=base/L"legacy OVR";std::filesystem::create_directories(primary);std::filesystem::create_directories(old/L"session's folder");
+        write(primary/L"current.csv",demoMetricsCsv());write(old/L"session's folder/quest.CSV",demoMetricsCsv());write(old/L"ignore.txt","fixture");
+        auto replace=[](std::string& text,const std::string& from,const std::string& to){size_t at=0;while((at=text.find(from,at))!=std::string::npos){text.replace(at,from.size(),to);at+=to.size();}};
+        auto posix=[](const auto& path){auto value=path.generic_u8string();return std::string("/")+char(std::tolower(value[0]))+value.substr(2);};auto primaryPath=posix(primary),oldPath=posix(old);
+        auto script=metricsReportScript();replace(script,shellQuote(current),shellQuote(primaryPath));replace(script,shellQuote(legacy),shellQuote(oldPath));
+        auto result=runProcess(std::filesystem::absolute(argv[2]).wstring(),{"-c","export PATH=/usr/bin:$PATH; "+script},10000);if(result.code)std::cerr<<result.output;check(result.code==0&&!result.timedOut,"real shell executes OVR discovery script");
+        replace(result.output,primaryPath,current);replace(result.output,oldPath,legacy);auto actual=parseMetricsReports(result.output);
+        check(actual.reports.size()==2&&actual.directories.size()==2,"real shell finds both OVR roots and nested uppercase CSV without text files");
+        check(std::any_of(actual.reports.begin(),actual.reports.end(),[](const auto& report){return report.path.find("session's folder/quest.CSV")!=std::string::npos;}),"real shell preserves spaces and apostrophes in report paths");
+        std::cout<<checks<<" CSV/shell checks passed\n";return 0;
+    }
     auto source=base/L"source.csv";write(source,demoMetricsCsv());
     {
         MetricsCapture monitor(base/L"cache");auto opened=wait(monitor.request("open_csv",source));check(opened.ok&&monitor.state().data->times.size()==360,"native CSV loading on worker");
@@ -69,6 +90,16 @@ int main(int argc,char** argv){try{
         check(!wait(closing).ok&&!std::filesystem::exists(reports/L"enabled"),"normal shutdown waits for CSV restoration and acknowledges cancellation");
         auto empty=base/L"empty-device";std::filesystem::create_directory(empty);write(empty/L"suppress_samples","fixture");SetEnvironmentVariableW(L"QUEST_FAKE_METRICS_ROOT",empty.c_str());
         {MetricsCapture monitor(base/L"empty-cache");monitor.device(fake.wstring(),"FAKE-QUEST",1,true);auto result=wait(monitor.request("record_timed",base/L"empty-session","",1));check(result.ok&&result.data["filesSaved"]==1&&result.data["hasSamples"]==false,"header-only CSV is a saved report, never measured samples");}
+        SetEnvironmentVariableW(L"QUEST_FAKE_METRICS_ROOT",nullptr);
+        auto old=base/L"legacy-device";std::filesystem::create_directory(old);write(old/L"legacy_layout","fixture");SetEnvironmentVariableW(L"QUEST_FAKE_METRICS_ROOT",old.c_str());
+        {MetricsCapture monitor(base/L"legacy-cache");monitor.device(fake.wstring(),"FAKE-QUEST",1,true);auto result=wait(monitor.request("record_timed",base/L"legacy-session","",1));check(result.ok&&result.data["hasSamples"]==true&&monitor.state().remote.rfind(legacy+"/session/",0)==0,"legacy nested reports reach plots and PC recordings");}
+        auto absent=base/L"no-reports-device";std::filesystem::create_directory(absent);write(absent/L"no_reports","fixture");write(absent/L"enabled","fixture");SetEnvironmentVariableW(L"QUEST_FAKE_METRICS_ROOT",absent.c_str());
+        {MetricsCapture monitor(base/L"absent-cache");monitor.device(fake.wstring(),"FAKE-QUEST",1,true);auto result=wait(monitor.request("refresh_reports"));check(result.ok&&monitor.state().reports.empty()&&monitor.state().diagnostic.find("Aucune statistique")!=std::string::npos,"no reports produces verified missing-selection diagnostic");write(absent/L"deny_reports","fixture");check(!wait(monitor.request("refresh_reports")).ok&&monitor.state().error.find("Accès refusé")!=std::string::npos,"permission denial is visible instead of zero-report success");}
+        SetEnvironmentVariableW(L"QUEST_FAKE_METRICS_ROOT",nullptr);
+        auto multiple=base/L"multiple-device";std::filesystem::create_directory(multiple);write(multiple/L"multi_reports","fixture");SetEnvironmentVariableW(L"QUEST_FAKE_METRICS_ROOT",multiple.c_str());
+        {MetricsCapture monitor(base/L"multiple-cache");monitor.device(fake.wstring(),"FAKE-QUEST",1,true);auto result=wait(monitor.request("record_timed",base/L"multiple-session","",1));check(result.ok&&result.data["filesSaved"]==2&&monitor.state().data->name=="quest.csv","newest changed report stays selected when multiple reports are saved");}
+        auto unavailable=base/L"unavailable-device";std::filesystem::create_directory(unavailable);write(unavailable/L"no_state","fixture");SetEnvironmentVariableW(L"QUEST_FAKE_METRICS_ROOT",unavailable.c_str());
+        {MetricsCapture monitor(base/L"unavailable-cache");monitor.device(fake.wstring(),"FAKE-QUEST",1,true);auto result=wait(monitor.request("refresh_reports"));check(!result.ok&&!result.error.empty()&&result.error.find("OVR Metrics")!=std::string::npos,"empty failed state response produces an actionable error");}
         SetEnvironmentVariableW(L"QUEST_FAKE_METRICS_ROOT",nullptr);
     }
     if(argc==4&&std::string(argv[1])=="--live"){

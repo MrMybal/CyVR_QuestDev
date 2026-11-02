@@ -11,6 +11,7 @@ public:
     MetricsCapture& capture();
     void sidebar();
     void draw();
+    bool takeConfigureRequest();
     nlohmann::json describe()const;
 private:
     struct Impl;std::unique_ptr<Impl> impl_;

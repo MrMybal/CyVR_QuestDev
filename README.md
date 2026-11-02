@@ -12,6 +12,8 @@ Neuf espaces possèdent leur propre navigation : **Console, Applications, Régla
 
 ![Console par application](docs/images/console.png)
 
+![Journal RAW sélectionnable — démonstration](docs/images/console-raw.png)
+
 ![Courbes OVR — données de démonstration](docs/images/metrics-curves.png)
 
 ## Démarrer
@@ -26,6 +28,7 @@ Dans **Console**, la colonne de gauche propose **Actives**, **Installées** et *
 
 ## Fonctions disponibles
 
+- **Console** : reprise du suivi au retour en bas, vue **RAW** sélectionnable et copiable, tableau triable par colonne avec tris combinés. [Guide du journal](docs/LOGS.md).
 - Navigation latérale adaptée à chaque page ; le gestionnaire d’applications affiche le nombre installé par catégorie et le nombre réellement affiché après recherche.
 - **Device Actions** : cartes avec icônes et interrupteurs animés pour GPU, HUD/CSV, ADB Wi-Fi, proximité et Boundary ; mirroring H.264 avec audio PC, fenêtre vidéo, plein écran, qualité réglable, recadrage et MKV ; PNG, MP4, navigateur, Perfetto, récupération des CSV, veille/réveil et redémarrage. Les états non lus ou non vérifiés sont signalés. [Guide du mirroring](docs/MIRRORING.md).
 - **ADB** : shell Android ou arguments ADB, sortie progressive, délai maximal, tâches concurrentes, annulation, historique et export.

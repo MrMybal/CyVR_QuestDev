@@ -7,7 +7,7 @@
   "description": "Native Meta Quest development tools and live application context",
   "vendor": "Cyberalien",
   "author": "Cyberalien",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "executable": "questdev-tool",
   "categories": [
     "development",
@@ -754,7 +754,7 @@
     {
       "id": "metrics_action",
       "name": "metrics_action",
-      "description": "Open an imported CSV, export the current CSV into this job, refresh/open/follow an OVR report, pause CSV following or stop the active metrics recording. open_csv uses sourceFile imported automatically by Core. Remote path must be a direct CSV in CapturedMetrics. stop_record requires native action approval.",
+      "description": "Open an imported CSV, export the current CSV into this job, refresh/open/follow an OVR report, pause CSV following or stop the active metrics recording. open_csv uses sourceFile imported automatically by Core. Remote path must be a CSV under a supported current or legacy OVR CapturedMetrics directory, including session subfolders. stop_record requires native action approval.",
       "inputSchema": {
         "type": "object",
         "properties": {

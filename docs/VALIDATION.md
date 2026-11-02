@@ -1,5 +1,13 @@
 # Validation
 
+## Alpha 0.8.1-1 — journal RAW, tri et rapports OVR
+
+Validation du 2 novembre 2026 : huit suites C++ passent (289 contrôles rapportés), dont des tests ImGui sans fenêtre du suivi, du retour manuel en bas, de l’arrivée de nouvelles lignes RAW et du copier-coller Ctrl+A/Ctrl+C. Le tri couvre les nombres, la gravité, les textes et les clés secondaires. La conservation des lignes originales est incluse dans le budget de rétention.
+
+La découverte OVR couvre les racines actuelle et historique, les sous-dossiers, les extensions majuscules et les erreurs d’accès. Un test exécute le vrai script shell dans des dossiers fictifs contenant espaces et apostrophes. Les tests ADB simulés vérifient l’enregistrement, les courbes, le diagnostic sans sélection et la restauration du CSV. Les tests natifs Core/SDK/MCP vérifient les imports/exports, le CSV qui grandit, les permissions, les annulations et la fermeture propre. Quinze captures des vues RAW, triées et métriques dans les cinq thèmes ; inspection visuelle mid-grey, navy et light-grey. Les 14 tests Python Core et 8 tests updater passent.
+
+Aucun Quest physique n’était connecté pendant cette validation. Le comportement exact de publication des rapports sur le casque de l’utilisateur reste à confirmer ; aucune application VR n’a été lancée ou arrêtée.
+
 ## Alpha 0.8.0-1 — journal, applications et transferts préparés
 
 Validation du 31 octobre 2026 : build Release, 228 contrôles C++, 14 tests Python Core et 8 tests updater réussis. Les suites C++ couvrent la rétention modifiable, l’attribution après redimensionnement, les listes PC, les noms et collisions Windows, les transferts préparés séquentiels, le lien au casque, la reprise, les annulations et la finalisation atomique. Un test dédié vérifie qu’un processus ADB parallèle ne peut pas conserver un handle local étranger. Les tests Core et updater restent disponibles.

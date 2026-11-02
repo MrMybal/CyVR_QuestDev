@@ -41,7 +41,7 @@ def main():
         time.sleep(3)
         with QuestDevClient(connection) as quest:
             context=quest.invoke('get_context')['context']
-            assert context['version']=='0.7.0'
+            assert context['version']==(ROOT/'VERSION').read_text().strip().split('-')[0]
             if options.fake:assert context['selectedDevice']=='FAKE-QUEST'
             else:assert context['online'] and context['selectedDevice']!='FAKE-QUEST'
             catalogue=quest.invoke('list_plugins')['plugins']

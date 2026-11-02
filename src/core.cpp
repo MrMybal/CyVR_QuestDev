@@ -55,6 +55,7 @@ std::optional<LogEntry> parseLog(const std::string& line) {
     e.tag = trim(rest.substr(0, colon)); e.message = rest.substr(colon + 1);
     if (!e.message.empty() && e.message.front() == ' ') e.message.erase(0, 1);
     if (!e.message.empty() && e.message.back() == '\r') e.message.pop_back();
+    e.raw=line;if(!e.raw.empty()&&e.raw.back()=='\r')e.raw.pop_back();
     e.lifecycle = e.tag.rfind("am_", 0) == 0 || e.tag.rfind("wm_", 0) == 0;
     return e;
 }
@@ -117,10 +118,10 @@ bool LogStore::ingest(const std::string& line) {
         if (e.tag == "am_proc_died" && f.size() >= 3) end(std::stoi(f[1]), e.epoch);
     } catch (...) {}
     e.id = nextId_++; attribute(e);
-    bytes_ += e.tag.size() + e.message.size() + sizeof(LogEntry) + e.search.size() + e.process.size() + e.package.size();
+    bytes_ += e.tag.size() + e.message.size() + sizeof(LogEntry) + e.search.size() + e.process.size() + e.package.size() + e.raw.size();
     entries_.push_back(std::move(e)); ++revision_; limit(); return true;
 }
-static size_t cost(const LogEntry& e) { return sizeof(LogEntry) + e.tag.size() + e.message.size() + e.search.size() + e.process.size() + e.package.size(); }
+static size_t cost(const LogEntry& e) { return sizeof(LogEntry) + e.tag.size() + e.message.size() + e.search.size() + e.process.size() + e.package.size() + e.raw.size(); }
 void LogStore::limit() {
     while (!entries_.empty() && (entries_.size() > capacity_ || bytes_ > byteLimit_)) {
         const auto n = cost(entries_.front()); bytes_ = n > bytes_ ? 0 : bytes_ - n; entries_.pop_front(); ++discarded_;
@@ -144,6 +145,29 @@ bool LogFilter::matches(const LogEntry& e) const {
 }
 std::string formatLog(const LogEntry& e) {
     std::ostringstream out; out << std::fixed << std::setprecision(6) << e.epoch << " " << e.level << " " << e.pid << "/" << e.tid << " [" << (e.package.empty() ? "system/unknown" : e.package) << "] " << e.tag << ": " << e.message; return out.str();
+}
+std::string rawLog(const LogEntry& e) { return e.raw.empty()?formatLog(e):e.raw; }
+bool logLess(const LogEntry& a,const LogEntry& b,const std::vector<LogSort>& order) {
+    for(const auto& sort:order){int result=0;
+        auto compare=[&](const auto& x,const auto& y){return x<y?-1:y<x?1:0;};
+        switch(sort.column){
+        case LogColumn::time:result=compare(a.epoch,b.epoch);break;
+        case LogColumn::level:result=compare(severity(a.level),severity(b.level));break;
+        case LogColumn::pid:result=compare(a.pid,b.pid);if(!result)result=compare(a.tid,b.tid);break;
+        case LogColumn::application:result=a.package.compare(b.package);break;
+        case LogColumn::tag:result=a.tag.compare(b.tag);break;
+        case LogColumn::message:result=a.message.compare(b.message);break;
+        }
+        if(result)return sort.descending?result>0:result<0;
+    }
+    return a.id<b.id;
+}
+bool logFollow(bool following,float previous,float current,float maximum,bool scrollUp,float tolerance) {
+    if(scrollUp)return false;
+    const bool bottom=current>=maximum-tolerance;
+    if(previous>=0&&current<previous-tolerance&&!bottom)return false;
+    if(previous>=0&&current>previous+tolerance&&bottom)return true;
+    return following;
 }
 static std::string json(const std::string& s) {
     std::ostringstream out; out << '"';

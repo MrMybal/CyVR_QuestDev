@@ -43,6 +43,12 @@ int wmain(int argc,wchar_t** argv) {
     if(a[2]=="exec-out"){
         if(a.size()>5&&a[3]=="sh"){
             auto emit=[](std::initializer_list<std::string> fields){for(const auto& field:fields){std::cout<<field;std::cout.put('\0');}};
+            if(a.back().find("CYVROVR2")!=std::string::npos){
+                auto root=metricsRoot();emit({"CYVROVR2"});if(root.empty()){emit({"END"});return 0;}
+                std::string remote=std::filesystem::exists(root/L"legacy_layout")?"/sdcard/OVRMonitorMetricsService/CapturedMetrics":"/sdcard/Android/data/com.oculus.ovrmonitormetricsservice/files/CapturedMetrics";
+                if(std::filesystem::exists(root/L"deny_reports")){emit({"DENIED",remote,"END"});return 0;}
+                emit({"ROOT",remote});if(!std::filesystem::exists(root/L"no_reports")){advanceMetrics(root);if(std::filesystem::exists(root/L"multi_reports")&&std::filesystem::exists(root/L"quest.csv"))std::filesystem::copy_file(root/L"quest.csv",root/L"older.csv",std::filesystem::copy_options::overwrite_existing);for(const auto& entry:std::filesystem::directory_iterator(root))if(entry.is_regular_file()&&entry.path().extension()==L".csv")emit({"FILE",std::to_string(entry.file_size()),entry.path().filename()==L"quest.csv"?"1700000010":"1700000000",remote+(std::filesystem::exists(root/L"legacy_layout")?"/session/":"/")+entry.path().filename().u8string()});}emit({"END"});return 0;
+            }
             if(a.back().find("CapturedMetrics")!=std::string::npos){auto root=metricsRoot();if(root.empty()){emit({"CYVRFILES1","END"});return 0;}advanceMetrics(root);emit({"CYVRFILES1"});for(const auto& entry:std::filesystem::directory_iterator(root))if(entry.is_regular_file()&&entry.path().extension()==L".csv")emit({"f",std::to_string(entry.file_size()),"1700000000",entry.path().filename().u8string(),""});emit({"END"});return 0;}
             if(a.back().find("/denied")!=std::string::npos){emit({"CYVRERROR1","Fixture access denied"});return 0;}
             emit({"CYVRFILES1","d","4096","1700000000","Download","","d","4096","1700000000","Documents","","f","22","1700000000","readme.txt","","f","8","1700000001","équipe's file.txt","","l","10","1700000000","link","../outside","END"});return 0;
@@ -56,6 +62,7 @@ int wmain(int argc,wchar_t** argv) {
     if(a[2]=="forward"||a[2]=="reverse"){std::cout<<"8787\n";return 0;}
     if(a[2]!="shell" || a.size()<4)return 3;
     if(a[3].find("CYVR_METRICS_SINCE=")!=std::string::npos){
+        if(std::filesystem::exists(metricsRoot()/L"no_state"))return 1;
         auto root=metricsRoot();if(!root.empty()){if(a[3].find("DISABLE_CSV")!=std::string::npos){std::error_code ec;std::filesystem::remove(root/L"enabled",ec);}else if(a[3].find("ENABLE_CSV")!=std::string::npos){std::ofstream out(root/L"enabled");out<<"fixture";}}
         J state={{"overlayEnabled",true},{"overlayHeadLocked",true},{"overlayPitch",8.0},{"overlayYaw",-12.0},{"overlayScale",1.0},{"overlayDistance",2.0},{"recordingMetricsEnabled",false},{"statsEnabled",false},{"graphEnabled",true},{"metrics",J::array({{{"name","Average FPS"},{"graphEnabled",true},{"statEnabled",false}},{{"name","App GPU Time (us)"},{"graphEnabled",true},{"statEnabled",false}}})}};
         state["recordingMetricsEnabled"]=!root.empty()&&std::filesystem::exists(root/L"enabled");

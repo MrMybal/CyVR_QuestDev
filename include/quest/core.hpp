@@ -19,7 +19,7 @@ struct LogEntry {
     double epoch{};
     int pid{}, tid{};
     char level{'I'};
-    std::string tag, message, process, package, search;
+    std::string tag, message, process, package, search, raw;
     bool lifecycle{};
 };
 std::string trim(std::string s);
@@ -31,6 +31,13 @@ std::vector<Package> parsePackages(const std::string& text, bool system = false)
 std::vector<ProcessInfo> parseProcesses(const std::string& text);
 std::optional<LogEntry> parseLog(const std::string& line);
 std::string formatLog(const LogEntry& entry);
+std::string rawLog(const LogEntry& entry);
+enum class LogColumn { time, level, pid, application, tag, message };
+struct LogSort { LogColumn column{LogColumn::time}; bool descending{}; };
+bool logLess(const LogEntry& a, const LogEntry& b, const std::vector<LogSort>& order);
+// Observe the viewport before adding rows: its maximum still describes the
+// previous frame, so incoming lines cannot be mistaken for a manual scroll.
+bool logFollow(bool following,float previous,float current,float maximum,bool scrollUp,float tolerance);
 std::string exportLogs(const std::vector<const LogEntry*>& entries, bool jsonl);
 
 struct LogFilter {

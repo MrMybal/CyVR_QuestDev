@@ -1,6 +1,6 @@
 # Installer CyVR QuestDev sur Windows
 
-Depuis les [releases GitHub](https://github.com/MrMybal/CyVR_QuestDev/releases), télécharger `CyVR_QuestDev-0.8.0-alpha.1-Windows-x64-Setup.exe`, puis suivre l’assistant en français ou en anglais. Windows 10/11 x64 est requis. Le dépôt privé nécessite un compte GitHub autorisé pour télécharger les fichiers.
+Depuis les [releases GitHub](https://github.com/MrMybal/CyVR_QuestDev/releases), télécharger `CyVR_QuestDev-0.8.1-alpha.1-Windows-x64-Setup.exe`, puis suivre l’assistant en français ou en anglais. Windows 10/11 x64 est requis. Le dépôt privé nécessite un compte GitHub autorisé pour télécharger les fichiers.
 
 L’installation est propre au compte Windows courant et ne demande pas de droits administrateur. Le dossier par défaut est `%LOCALAPPDATA%/Programs/CyVR QuestDev`. Un raccourci est ajouté au menu Démarrer ; celui du Bureau est facultatif. Le logo de l’app est utilisé pour le Setup, les raccourcis et la désinstallation. Fermer QuestDev avant de réinstaller ou désinstaller.
 
