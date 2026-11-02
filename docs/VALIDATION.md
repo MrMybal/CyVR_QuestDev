@@ -6,7 +6,7 @@ Validation du 2 novembre 2026 : huit suites C++ passent (289 contrôles rapport�
 
 La découverte OVR couvre les racines actuelle et historique, les sous-dossiers, les extensions majuscules et les erreurs d’accès. Un test exécute le vrai script shell dans des dossiers fictifs contenant espaces et apostrophes. Les tests ADB simulés vérifient l’enregistrement, les courbes, le diagnostic sans sélection et la restauration du CSV. Les tests natifs Core/SDK/MCP vérifient les imports/exports, le CSV qui grandit, les permissions, les annulations et la fermeture propre. Quinze captures des vues RAW, triées et métriques dans les cinq thèmes ; inspection visuelle mid-grey, navy et light-grey. Les 14 tests Python Core et 8 tests updater passent.
 
-Aucun Quest physique n’était connecté pendant cette validation. Le comportement exact de publication des rapports sur le casque de l’utilisateur reste à confirmer ; aucune application VR n’a été lancée ou arrêtée.
+Une validation complémentaire a ensuite été effectuée sur un Quest 3 connecté : capture réelle de deux secondes, CSV de 141 métriques et 2 échantillons enregistré sur PC, réouverture et rendu des courbes dans l’interface native. Le mode CSV initial a été relu et restauré à la fin du test. Aucune application VR n’a été lancée ou arrêtée. Ce test court confirme la collecte sur cette configuration ; les champs disponibles et la cadence restent ceux fournis par OVR.
 
 ## Alpha 0.8.0-1 — journal, applications et transferts préparés
 
