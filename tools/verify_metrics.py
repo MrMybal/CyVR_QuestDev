@@ -14,6 +14,7 @@ import sys
 import time
 
 ROOT=Path(__file__).resolve().parents[1]
+BUILD=Path(os.environ.get('QUESTDEV_BUILD_DIR',str(ROOT/'build/windows')))
 sys.path.insert(0,str(ROOT/'assistant'))
 from sdk import QuestDevClient
 from mcp import ClientSession,StdioServerParameters
@@ -49,7 +50,7 @@ def main():
     environment=dict(os.environ);environment['QUEST_FAKE_METRICS_ROOT']=str(reports)
     connection=Path(os.environ['LOCALAPPDATA'])/'CyVR/QuestDev/assistant/connection.json'
     assert not connection.exists(),'Close the other QuestDev instance first'
-    command=[str(ROOT/'build/windows/CyVR_QuestDev.exe'),'--adb',str(ROOT/'build/windows/fake_adb.exe'),'--page','8','--metrics-csv',str(source),'--capture',str(folder/'native.bmp'),'--capture-after-ms','23000']
+    command=[str(BUILD/'CyVR_QuestDev.exe'),'--adb',str(BUILD/'fake_adb.exe'),'--page','8','--metrics-csv',str(source),'--capture',str(folder/'native.bmp'),'--capture-after-ms','23000']
     started=time.time();app=subprocess.Popen(command,env=environment,creationflags=subprocess.CREATE_NO_WINDOW)
     try:
         deadline=time.monotonic()+12

@@ -1,8 +1,10 @@
 # Archives Alpha Windows
 
-La release `v0.8.1-alpha.1` propose un **installateur Windows x64** et une archive portable avec l’exécutable, les plugins, le moteur de mirroring scrcpy, les guides, les licences et un **Python 3.13.17 embarqué**. L’installateur crée les raccourcis et la désinstallation pour le compte Windows courant ; le ZIP s’extrait entièrement pour lancer `CyVR_QuestDev.exe`. ADB et les CLI des fournisseurs IA restent des outils externes. Le runtime embarqué ne remplace pas les installations Python de la machine. Voir [INSTALLATION.md](INSTALLATION.md).
+La release `v0.9.0-alpha.1` propose un **installateur Windows x64** et une archive portable avec l’exécutable, les plugins, le moteur de mirroring scrcpy, les guides, les licences et un **Python 3.13.17 embarqué**. L’installateur crée les raccourcis et la désinstallation pour le compte Windows courant ; le ZIP s’extrait entièrement pour lancer `CyVR_QuestDev.exe`. ADB et les CLI des fournisseurs IA restent des outils externes. Le runtime embarqué ne remplace pas les installations Python de la machine. Voir [INSTALLATION.md](INSTALLATION.md).
 
 L’archive **Source** comprend le projet et les sources CyUI / Dear ImGui nécessaires à la recompilation, ainsi que les archives sources scrcpy, FFmpeg, SDL, libusb et dav1d. `SOURCE-SHA256.json` identifie tous ses fichiers. Les archives ont des empreintes dans `SHA256SUMS.txt`. Les limites des fonctionnalités Alpha sont décrites dans [VALIDATION.md](VALIDATION.md).
+
+Pour l’architecture modulaire, reconstruire avec le commit CyUI épinglé et conserver `UI-BUILD.json`. Le packager inclut également TextEditor, Lexilla, les en-têtes Scintilla, les données générées et leurs notices. Il vérifie le SHA-256 de l’exécutable reconstruit. Voir [CYUI_MIGRATION.md](CYUI_MIGRATION.md).
 
 Les versions 0.7+ proposent aussi [la mise à jour depuis l’application](UPDATES.md).
 
@@ -14,9 +16,9 @@ Depuis un arbre de sources vérifié, installer les prérequis du [README](../RE
 python tools/build.py --clean --test
 python tools/setup_mirroring.py
 runtime/python/Scripts/python.exe -m pip download --only-binary=:all: --platform win_amd64 --python-version 3.13 --implementation cp --abi cp313 --find-links runtime/wheels -r runtime/requirements.lock --dest build/release-cache/wheels
-python tools/package_release.py --output build/releases/v0.8.1-alpha.1 --cyui ../CyImgui_Interface
+python tools/package_release.py --output build/releases/v0.9.0-alpha.1 --cyui ../CyUI
 python tools/setup_installer.py
-python tools/build_installer.py --product build/releases/v0.8.1-alpha.1/CyVR_QuestDev-0.8.1-alpha.1-Windows-x64 --output build/releases/v0.8.1-alpha.1
+python tools/build_installer.py --product build/releases/v0.9.0-alpha.1/CyVR_QuestDev-0.9.0-alpha.1-Windows-x64 --output build/releases/v0.9.0-alpha.1
 ```
 
 Le script récupère le Python embarqué officiel s’il manque au cache et vérifie son SHA-256 épinglé depuis le manifeste Python.org. Les versions des dépendances sont celles de `runtime/requirements.lock`. Les roues sont extraites dans un runtime isolé, sans réutiliser l’environnement virtuel local. Un nouveau dossier de sortie est requis à chaque tentative ; les paquets précédents sont préservés.

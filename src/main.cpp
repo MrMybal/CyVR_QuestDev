@@ -4,7 +4,7 @@
 // Win32 / DirectX 11 host, adapted from the CyUI and Dear ImGui examples.
 // See THIRD_PARTY.md for dependency notices.
 
-#include <cyui/CyUI.h>
+#include <cyui/Core.h>
 #include "quest/app.hpp"
 #include "quest/resources.h"
 #include "quest/version.hpp"
@@ -197,6 +197,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
     quest::Options options;
     int captureFrames = 80;
     int captureDelay = 1500;
+    float overrideDpi=0;
     int count = 0;
     auto** args = CommandLineToArgvW(GetCommandLineW(), &count);
     for (int i = 1; i < count; ++i) {
@@ -205,6 +206,10 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
         if (arg == L"--capture") capturePath = next();
         else if (arg == L"--theme") themeKey = quest::narrow(next());
         else if (arg == L"--demo") options.demo = true;
+        else if (arg == L"--ui-fixtures") options.uiFixtures = true;
+        else if (arg == L"--locale") options.locale=quest::narrow(next());
+        else if (arg == L"--compact") options.compact=true;
+        else if (arg == L"--dpi") overrideDpi=std::clamp(float(_wtof(next().c_str())),0.75f,2.f);
         else if (arg == L"--compare") options.compare = true;
         else if (arg == L"--log-raw") options.logRaw = true;
         else if (arg == L"--log-sort") options.logSort = std::clamp(_wtoi(next().c_str()),0,5);
@@ -239,7 +244,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
     const auto comResult=CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);
 
     ImGui_ImplWin32_EnableDpiAwareness();
-    const auto dpiScale = ImGui_ImplWin32_GetDpiScaleForMonitor(::MonitorFromPoint(POINT { 0, 0 }, MONITOR_DEFAULTTOPRIMARY));
+    const auto dpiScale = overrideDpi>0?overrideDpi:ImGui_ImplWin32_GetDpiScaleForMonitor(::MonitorFromPoint(POINT { 0, 0 }, MONITOR_DEFAULTTOPRIMARY));
 
     WNDCLASSEXW wc { sizeof(wc), CS_CLASSDC, windowProc, 0L, 0L, GetModuleHandle(nullptr), nullptr, nullptr, nullptr, nullptr,
                      L"CyVRQuestDev02", nullptr };
@@ -269,7 +274,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
     // CyUI: the theme, then the fonts.
     cyui::Config config;
     config.themeKey = themeKey.c_str();
-    config.density = cyui::Density::comfortable;
+    config.density = options.compact?cyui::Density::compact:cyui::Density::comfortable;
     config.dpiScale = dpiScale;
     cyui::apply(config);
     cyui::loadFonts();

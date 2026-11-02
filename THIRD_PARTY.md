@@ -4,7 +4,9 @@ Le code original de CyVR QuestDev est sous **GNU GPLv3 uniquement** (`GPL-3.0-on
 
 ## CyUI / CyImgui_Interface
 
-Bibliothèque de widgets et thèmes, liée depuis le dossier indiqué par `CYUI_ROOT` ou détecté près du projet. Licence MIT, copyright 2026 Cyberalien. Le code d’hébergement Win32/DX11 est adapté de son exemple. Notice complète : [licenses/CyUI.txt](licenses/CyUI.txt).
+Bibliothèque commune [CyUI 1.2](https://github.com/MrMybal/CyUI), révision `ff023e646c6a3038b3dfbfd53f6d2b4a2f5955e3`, épinglée dans `cmake/CyUI.cmake`. Modules Core, Plots, Images, DocumentViews et CodeEditor, avec Code et Canvas comme dépendances. Licence [MIT dans le dépôt CyUI](https://github.com/MrMybal/CyUI/blob/ff023e646c6a3038b3dfbfd53f6d2b4a2f5955e3/LICENSE), copyright 2026 Cyberalien. Le dépôt est actuellement privé et son lien nécessite un accès GitHub autorisé. Le code d’hébergement Win32/DX11 est adapté de son exemple. Notice complète incluse dans QuestDev : [licenses/CyUI.txt](licenses/CyUI.txt).
+
+CodeEditor ajoute le backend MIT ImGuiColorTextEdit de Johan A. Goossens : [notice](licenses/CyUI-TextEditor.txt). Code compile les moteurs lexicaux Lexilla et utilise les en-têtes Scintilla et des propriétés SciTE, sous leur licence permissive de Neil Hodgson et contributeurs : [Lexilla](licenses/CyUI-Lexilla.txt), [Scintilla](licenses/CyUI-Scintilla.txt), [SciTE](licenses/CyUI-SciTE.txt). Leurs révisions et correctifs sont ceux du commit CyUI épinglé (`third_party/texteditor/VERSION.json` et `third_party/code-syntax.lock.json`). Aucune interface Scintilla ni application SciTE n’est liée.
 
 ## CyVR_UI — projet associé
 

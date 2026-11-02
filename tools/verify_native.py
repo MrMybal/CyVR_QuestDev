@@ -11,6 +11,7 @@ import time
 import argparse
 
 ROOT=Path(__file__).resolve().parents[1]
+BUILD=Path(os.environ.get('QUESTDEV_BUILD_DIR',str(ROOT/'build/windows')))
 sys.path.insert(0,str(ROOT/'assistant'))
 from sdk import QuestDevClient
 
@@ -20,8 +21,8 @@ def main():
     connection=Path(os.environ['LOCALAPPDATA'])/'CyVR/QuestDev/assistant/connection.json'
     screenshot=ROOT/('captures/files-native-fake.bmp' if options.fake else 'captures/assistant-live.bmp');screenshot.parent.mkdir(exist_ok=True)
     started=time.time()
-    arguments=[str(ROOT/'build/windows/CyVR_QuestDev.exe'),'--page','7' if options.fake else '3','--capture',str(screenshot),'--capture-after-ms','20000' if options.fake else '16000']
-    if options.fake:arguments += ['--adb',str(ROOT/'build/windows/fake_adb.exe')]
+    arguments=[str(BUILD/'CyVR_QuestDev.exe'),'--page','7' if options.fake else '3','--capture',str(screenshot),'--capture-after-ms','20000' if options.fake else '16000']
+    if options.fake:arguments += ['--adb',str(BUILD/'fake_adb.exe')]
     app=subprocess.Popen(arguments,creationflags=subprocess.CREATE_NO_WINDOW)
     try:
         deadline=time.monotonic()+12

@@ -2,9 +2,9 @@
   <img src="assets/branding/cyvr-questdev-logo-gradient.png" alt="Logo CyVR QuestDev" width="160">
 </p>
 
-# CyVR QuestDev 0.8
+# CyVR QuestDev 0.9
 
-Outils de développement pour Meta Quest, en C++17, Win32 et DirectX 11, avec l’interface **CyUI / CyImgui_Interface**.
+Outils de développement pour Meta Quest, en C++17, Win32 et DirectX 11, avec l’interface modulaire **CyUI 1.2**. Le panneau de texte commun est isolé dans une cible C++20.
 
 Copyright © 2026 Cyberalien. Projet sous **GNU GPLv3 uniquement** (`GPL-3.0-only`) : [licence intégrale](LICENSE), [copyright et périmètre](COPYRIGHT). Les composants tiers conservent leurs propres licences, recensées dans [THIRD_PARTY.md](THIRD_PARTY.md).
 
@@ -68,13 +68,13 @@ Les processus d’origine incertaine restent dans **Système / non attribué**. 
 
 ## Compiler et vérifier
 
-Prérequis : Windows 10/11 x64, Visual Studio 2022 avec les outils C++, CMake/Ninja de Visual Studio, Python 3 et le dépôt CyUI. Placer `CyImgui_Interface` près du projet ou dans un dossier parent, définir `CYUI_ROOT`, ou passer `-CyUIRoot` au script. ADB est requis pour utiliser un casque ; il n’est pas redistribué dans ce projet.
+Prérequis : Windows 10/11 x64, Visual Studio 2022 avec les outils C++17/C++20, CMake/Ninja et Python 3. La révision CyUI est épinglée dans `cmake/CyUI.cmake`. Le script utilise un dépôt `CyUI` (ou l’ancien nom `CyImgui_Interface`) voisin, `CYUI_ROOT` ou `-CyUIRoot`, puis extrait le commit exact dans le cache de build. Les modifications du dépôt partagé restent intactes. CMake peut également récupérer directement ce commit. ADB est requis pour utiliser un casque ; il n’est pas redistribué dans ce projet. [Architecture et modules](docs/CYUI_MIGRATION.md).
 
 ```powershell
 .\build.ps1 -Test
 .\build.ps1 -Run
 # Autre emplacement de CyUI :
-.\build.ps1 -Test -CyUIRoot D:\chemin\CyImgui_Interface
+.\build.ps1 -Test -CyUIRoot ../CyUI -BuildDirectory build/cyui-migration
 # Installer / réparer le Python privé de l’assistant :
 .\runtime\setup.ps1
 .\runtime\python\Scripts\python.exe -m unittest discover -s assistant/tests -v

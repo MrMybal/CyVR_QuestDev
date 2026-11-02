@@ -15,6 +15,7 @@ import sys
 import time
 
 ROOT=Path(__file__).resolve().parents[1]
+BUILD=Path(os.environ.get('QUESTDEV_BUILD_DIR',str(ROOT/'build/windows')))
 sys.path.insert(0,str(ROOT/'assistant'))
 from sdk import QuestDevClient
 
@@ -28,8 +29,8 @@ def main():
     connection=Path(os.environ['LOCALAPPDATA'])/'CyVR/QuestDev/assistant/connection.json'
     screenshot=ROOT/'captures'/('plugins-native-fake.bmp' if options.fake else 'plugins-native-live.bmp')
     screenshot.parent.mkdir(exist_ok=True)
-    command=[str(ROOT/'build/windows/CyVR_QuestDev.exe'),'--page','5','--plugin','meta.ovr-metrics','--capture',str(screenshot),'--capture-after-ms','22000']
-    if options.fake:command+=['--adb',str(ROOT/'build/windows/fake_adb.exe')]
+    command=[str(BUILD/'CyVR_QuestDev.exe'),'--page','5','--plugin','meta.ovr-metrics','--capture',str(screenshot),'--capture-after-ms','22000']
+    if options.fake:command+=['--adb',str(BUILD/'fake_adb.exe')]
     started=time.time()
     app=subprocess.Popen(command,creationflags=subprocess.CREATE_NO_WINDOW)
     try:

@@ -1,5 +1,15 @@
 # Validation
 
+## Alpha 0.9.0-1 — migration modulaire CyUI
+
+Validation du 2 novembre 2026 sur Windows x64 / MSVC 2022, avec CyUI 1.2.0 épinglé à `ff023e646c6a3038b3dfbfd53f6d2b4a2f5955e3`. Configuration initiale dans un nouveau dossier, compilation Release et **neuf suites C++ / 303 contrôles** réussis. Le graphe Ninja confirme une seule instance ImGui, les cibles modulaires sélectionnées, C++17 dans le host et C++20 limité à l’éditeur et son adaptateur. Audio, Gallery, Web/CEF et `imgui_demo.cpp` sont absents du graphe.
+
+Les tests ImGui couvrent le zoom des courbes et de l’aperçu, la copie/sélection RAW en lecture seule, le suivi après retour manuel en bas, le focus clavier, les IDs 64 bits, les mises à jour du transcript, le changement de langue sans changement d’identités et le DPI. Le réducteur de données OVR conserve un pic et un minimum voisins d’une valeur manquante ; les statistiques ne dépendent pas de la réduction d’affichage.
+
+**69 rendus synthétiques** : six vues (RAW, métriques, discussion, capture, ADB, JSON), cinq thèmes, deux densités ; compléments à 125 % et 150 % et comparaison RAW. Inspection visuelle navy, mid-grey, light-grey et violet. Quatre démarrages dans trois profils isolés confirment la relecture des limites, modes de fichiers, langue et densité. **14 tests Python Core** passent. Les parcours natifs CSV/Core/SDK/MCP avec ADB simulé passent : import/export, CSV croissant, annulation, permissions, catalogue de 38 outils et fermeture propre.
+
+Les sources CyUI viennent de l’objet Git exact, sans modification du checkout partagé. Les nouveaux fichiers de licence TextEditor/Lexilla/Scintilla/SciTE sont inclus. Les vérifications utilisent des copies et profils de test distincts de l’installation courante. Pas de test matériel Quest supplémentaire ni de test Linux/macOS ; le host prévu reste Win32/DX11. Choix, écarts d’API et commandes de reproduction : [CYUI_MIGRATION.md](CYUI_MIGRATION.md).
+
 ## Alpha 0.8.1-1 — journal RAW, tri et rapports OVR
 
 Validation du 2 novembre 2026 : huit suites C++ passent (289 contrôles rapportés), dont des tests ImGui sans fenêtre du suivi, du retour manuel en bas, de l’arrivée de nouvelles lignes RAW et du copier-coller Ctrl+A/Ctrl+C. Le tri couvre les nombres, la gravité, les textes et les clés secondaires. La conservation des lignes originales est incluse dans le budget de rétention.

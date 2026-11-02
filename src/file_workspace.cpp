@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Cyberalien
 // SPDX-License-Identifier: GPL-3.0-only
 #include "quest/file_workspace.hpp"
-#include <cyui/CyUI.h>
+#include <cyui/Core.h>
 #include <imgui.h>
 #define WIN32_LEAN_AND_MEAN
 #ifndef NOMINMAX
@@ -180,7 +180,7 @@ struct FileWorkspace::Impl {
         if(cyui::searchField("##filter",p.filter.data(),int(p.filter.size()),"Filtrer les noms",-1))p.anchor=-1;
         if(!p.error.empty())cyui::callout(cyui::Tone::error,p.error.substr(0,500).c_str());
         if(p.listing.truncated)cyui::textFaint("Liste limitée à 5 000 entrées.");
-        if(!pc&&listingJob){cyui::progressBar(-1,ImVec2(-cyui::dp(72),cyui::dp(4)));ImGui::SameLine();if(cyui::ghostButton("Annuler"))cancelJob(listingJob);}
+        if(!pc&&listingJob){cyui::progressBar(-1,ImVec2(-cyui::dp(72),cyui::dp(4)));ImGui::SameLine();if(cyui::ghostButton(cyui::trLabel("Cancel").c_str()))cancelJob(listingJob);}
         auto selected=selection(p);
         {cyui::ScopedDisabled disabled(demo||(!online&&(!prepare||device.empty())));
             if(pc){cyui::ScopedDisabled noSelection(selected.empty());if(cyui::iconTextButton(cyui::icon::upload,prepare?"Ajouter vers Quest":"Envoyer vers Quest",prepare?cyui::Variant::secondary:cyui::Variant::primary)){std::vector<std::wstring> paths;for(const auto* f:selected)paths.push_back((std::filesystem::path(widen(p.folder))/widen(f->name)).wstring());upload(paths);}}
@@ -189,19 +189,19 @@ struct FileWorkspace::Impl {
                 if(p.selected.size()==1){const auto& name=*p.selected.begin();ImGui::SameLine();if(cyui::iconButton(cyui::icon::rename,"Renommer la sélection Quest (clic)")){action=2;dialogTarget=remotePath(p.folder+"/"+name);strncpy_s(newName.data(),newName.size(),name.c_str(),_TRUNCATE);dialog=true;}ImGui::SameLine();if(cyui::iconButton(cyui::icon::trash,"Supprimer le fichier ou dossier vide Quest (clic)")){action=3;dialogTarget=remotePath(p.folder+"/"+name);dialog=true;}}
             }
         }
-        if(!pc&&!online&&!demo)cyui::emptyState("Quest déconnecté","Le volet PC et la liste préparée restent disponibles.",cyui::icon::connect);
-        else if(p.listing.entries.empty()&&!listingJob&&p.error.empty())cyui::emptyState("Dossier vide","Ouvrez un autre dossier ou ajoutez un fichier.",cyui::icon::folder);
+        if(!pc&&!online&&!demo)cyui::emptyState(cyui::tr("Quest déconnecté").c_str(),cyui::tr("Le volet PC et la liste préparée restent disponibles.").c_str(),cyui::icon::connect);
+        else if(p.listing.entries.empty()&&!listingJob&&p.error.empty())cyui::emptyState(cyui::tr("Dossier vide").c_str(),cyui::tr("Ouvrez un autre dossier ou ajoutez un fichier.").c_str(),cyui::icon::folder);
         else table(p,pc);
         ImGui::PopID();
     }
     void queuePanel(){
         const auto& items=queue.items();auto pending=queue.count(TransferState::waiting),done=queue.count(TransferState::succeeded),failed=queue.count(TransferState::failed),cancelled=queue.count(TransferState::cancelled);
         cyui::heading(("Liste de transferts · "+std::to_string(items.size())+" fichier(s)").c_str(),3);
-        {cyui::ScopedDisabled disabled(demo||!online||queue.running()||!pending);if(cyui::button("Lancer le lot",prepare?cyui::Variant::primary:cyui::Variant::secondary))try{queue.start(device);message="Lot lancé.";}catch(const std::exception& e){message=e.what();}}
-        ImGui::SameLine();{cyui::ScopedDisabled disabled(demo||(!queue.active()&&!pending));if(cyui::button("Annuler le lot")){cancelJob(queue.cancelAll());message="Lot annulé. Les fichiers déjà transférés sont conservés.";}}
-        ImGui::SameLine();{cyui::ScopedDisabled disabled(queue.active());if(cyui::ghostButton("Remettre en attente…"))ImGui::OpenPopup("##retry");if(ImGui::BeginPopup("##retry")){if(ImGui::MenuItem("Échecs uniquement")){queue.retry(false);message="Échecs remis en attente. Relancez le lot.";}if(ImGui::MenuItem("Échecs et annulations")){queue.retry(true);message="Échecs et annulations remis en attente. Relancez le lot.";}ImGui::EndPopup();}}
-        ImGui::SameLine();if(cyui::ghostButton("Retirer terminés"))queue.clearFinished();
-        ImGui::SameLine();cyui::toggleSwitch("Arrêt sur erreur",&queue.stopOnError);
+        {cyui::ScopedDisabled disabled(demo||!online||queue.running()||!pending);if(cyui::button(cyui::trLabel("Start batch").c_str(),prepare?cyui::Variant::primary:cyui::Variant::secondary))try{queue.start(device);message="Lot lancé.";}catch(const std::exception& e){message=e.what();}}
+        ImGui::SameLine();{cyui::ScopedDisabled disabled(demo||(!queue.active()&&!pending));if(cyui::button(cyui::trLabel("Cancel batch").c_str())){cancelJob(queue.cancelAll());message="Lot annulé. Les fichiers déjà transférés sont conservés.";}}
+        ImGui::SameLine();{cyui::ScopedDisabled disabled(queue.active());if(cyui::ghostButton(cyui::trLabel("Remettre en attente…").c_str()))ImGui::OpenPopup("##retry");if(ImGui::BeginPopup("##retry")){if(ImGui::MenuItem("Échecs uniquement")){queue.retry(false);message="Échecs remis en attente. Relancez le lot.";}if(ImGui::MenuItem("Échecs et annulations")){queue.retry(true);message="Échecs et annulations remis en attente. Relancez le lot.";}ImGui::EndPopup();}}
+        ImGui::SameLine();if(cyui::ghostButton(cyui::trLabel("Retirer terminés").c_str()))queue.clearFinished();
+        ImGui::SameLine();cyui::toggleSwitch(cyui::trLabel("Arrêt sur erreur").c_str(),&queue.stopOnError);
         float fraction=items.empty()?0:float(done+failed+cancelled)/float(items.size());if(!active.empty()&&!items.empty())fraction+=active.begin()->second.percent/100.f/float(items.size());
         auto progress=std::to_string(done)+" terminé(s) · "+std::to_string(pending)+" en attente · "+std::to_string(failed)+" échec(s) · "+std::to_string(cancelled)+" annulé(s)";
         cyui::progressBar(fraction,ImVec2(-1,cyui::dp(16)),progress.c_str(),failed?cyui::Tone::warning:cyui::Tone::info);
@@ -217,10 +217,10 @@ struct FileWorkspace::Impl {
         }
     }
     void draw(){
-        cyui::panelHeader("Fichiers","PC et Quest · sélection multiple · transferts immédiats ou liste préparée.");
-        bool changed=cyui::toggleSwitch("Côte à côte",&split);ImGui::SameLine();bool modeChanged=cyui::toggleSwitch("Préparer une liste",&prepare);
+        cyui::panelHeader(cyui::tr("Files").c_str(),cyui::tr("PC et Quest · sélection multiple · transferts immédiats ou liste préparée.").c_str());
+        bool changed=cyui::toggleSwitch(cyui::trLabel("Side by side").c_str(),&split);ImGui::SameLine();bool modeChanged=cyui::toggleSwitch(cyui::trLabel("Prepare list").c_str(),&prepare);
         if(modeChanged){if(prepare)showQueue=true;else if(!queue.running()&&queue.count(TransferState::waiting)){prepare=true;cyui::notify("Lancez ou annulez la liste préparée avant de passer aux transferts immédiats.",cyui::Tone::info);}changed=true;}if(changed)save();
-        ImGui::SameLine();cyui::toggleSwitch("Fichiers cachés",&hidden);ImGui::SameLine();cyui::toggleSwitch("Remplacer",&overwrite);cyui::tooltip("Autoriser le remplacement pour les nouveaux transferts ajoutés. Les lignes déjà préparées conservent leur choix.");
+        ImGui::SameLine();cyui::toggleSwitch(cyui::trLabel("Fichiers cachés").c_str(),&hidden);ImGui::SameLine();cyui::toggleSwitch(cyui::trLabel("Remplacer").c_str(),&overwrite);cyui::tooltip("Autoriser le remplacement pour les nouveaux transferts ajoutés. Les lignes déjà préparées conservent leur choix.");
         {cyui::ScopedDisabled disabled(demo||(!online&&(!prepare||device.empty())));if(cyui::iconTextButton(cyui::icon::upload,prepare?"Ajouter des fichiers PC…":"Envoyer des fichiers PC…",split||prepare?cyui::Variant::secondary:cyui::Variant::primary))upload(chooseFiles());}
         ImGui::SameLine();if(cyui::ghostButton(showQueue?"Masquer la liste":"Afficher la liste"))showQueue=!showQueue;
         if(overwrite)cyui::textColoured(cyui::palette().warning,"Remplacement activé pour les nouveaux transferts.");
@@ -229,11 +229,11 @@ struct FileWorkspace::Impl {
         if(split&&ImGui::BeginTable("##fileSplit",2,ImGuiTableFlags_Resizable|ImGuiTableFlags_BordersInnerV|ImGuiTableFlags_SizingStretchSame)){
             ImGui::TableNextColumn();ImGui::BeginChild("##pcPane");pane(true);ImGui::EndChild();ImGui::TableNextColumn();ImGui::BeginChild("##questPane");pane(false);ImGui::EndChild();ImGui::EndTable();
         }else if(!split){ImGui::BeginChild("##questPane");pane(false);ImGui::EndChild();}ImGui::EndChild();
-        if(queueVisible){ImGui::BeginChild("##queue");if(showQueue)queuePanel();else{cyui::textDim("Transfert en cours · %zu fichier(s) en attente",queue.count(TransferState::waiting));if(cyui::button("Voir la liste"))showQueue=true;ImGui::SameLine();if(cyui::ghostButton("Annuler le lot"))cancelJob(queue.cancelAll());}ImGui::EndChild();}
-        if(cyui::beginModal("Fichier du Quest",&dialog,cyui::dp(580))){
+        if(queueVisible){ImGui::BeginChild("##queue");if(showQueue)queuePanel();else{cyui::textDim("Transfert en cours · %zu fichier(s) en attente",queue.count(TransferState::waiting));if(cyui::button(cyui::trLabel("Voir la liste").c_str()))showQueue=true;ImGui::SameLine();if(cyui::ghostButton(cyui::trLabel("Cancel batch").c_str()))cancelJob(queue.cancelAll());}ImGui::EndChild();}
+        if(cyui::beginModal(cyui::trLabel("Fichier du Quest").c_str(),&dialog,580)){
             const char* names[]={"","Créer un dossier","Renommer l’entrée","Supprimer l’entrée"};cyui::heading(names[std::clamp(action,0,3)],2);ImGui::TextWrapped("%s",label(dialogTarget).c_str());
             if(action!=3){ImGui::SetNextItemWidth(-1);ImGui::InputText("##newName",newName.data(),newName.size());}else cyui::callout(cyui::Tone::warning,"La suppression est définitive. Un dossier doit être vide ; les liens ne sont pas suivis.");
-            if(cyui::modalButtons(action==3?"Supprimer":"Exécuter","Annuler",action==3)==1)try{auto job=changeRemoteFile(action==1?"mkdir":action==2?"rename":"delete",dialogTarget,newName.data());changes.insert(submit(std::move(job),{}));}catch(const std::exception& e){message=e.what();cyui::notify(e.what(),cyui::Tone::error);}
+            if(cyui::modalButtons(action==3?"Supprimer":"Run","Cancel",action==3)==1)try{auto job=changeRemoteFile(action==1?"mkdir":action==2?"rename":"delete",dialogTarget,newName.data());changes.insert(submit(std::move(job),{}));}catch(const std::exception& e){message=e.what();cyui::notify(e.what(),cyui::Tone::error);}
             cyui::endModal();
         }
     }
@@ -249,14 +249,14 @@ bool FileWorkspace::prepareList()const{return impl_->prepare;}
 bool FileWorkspace::busy()const{return impl_->queue.active()||impl_->queue.count(TransferState::waiting)!=0;}
 nlohmann::json FileWorkspace::describe()const{const auto& p=*impl_;return {{"directory",p.remote.folder},{"selected",p.remote.selected.size()==1?*p.remote.selected.begin():std::string()},{"entries",p.remote.listing.entries.size()},{"loading",p.listingJob!=0},{"error",p.remote.error.substr(0,1000)},{"sideBySide",p.split},{"prepareList",p.prepare},{"localEntries",p.local.listing.entries.size()},{"selectedCount",p.remote.selected.size()},{"transfers",{{"waiting",p.queue.count(TransferState::waiting)},{"running",p.queue.active()},{"succeeded",p.queue.count(TransferState::succeeded)},{"failed",p.queue.count(TransferState::failed)},{"cancelled",p.queue.count(TransferState::cancelled)}}}};}
 void FileWorkspace::sidebar(const std::vector<Package>& packages,const std::string& selectedPackage){
-    auto& p=*impl_;cyui::overline("FICHIERS DU QUEST");cyui::space(10);
-    const std::pair<const char*,const char*> shortcuts[]={{"Stockage partagé","/sdcard"},{"Téléchargements","/sdcard/Download"},{"Documents","/sdcard/Documents"},{"Images","/sdcard/Pictures"},{"Vidéos","/sdcard/Movies"},{"Données des applications","/sdcard/Android/data"},{"Extensions OBB","/sdcard/Android/obb"},{"Dossier temporaire ADB","/data/local/tmp"}};
+    auto& p=*impl_;cyui::overline(cyui::tr("FICHIERS DU QUEST").c_str());cyui::space(10);
+    const std::pair<const char*,const char*> shortcuts[]={{"Shared storage","/sdcard"},{"Downloads","/sdcard/Download"},{"Documents","/sdcard/Documents"},{"Pictures","/sdcard/Pictures"},{"Videos","/sdcard/Movies"},{"Données des applications","/sdcard/Android/data"},{"Extensions OBB","/sdcard/Android/obb"},{"Dossier temporaire ADB","/data/local/tmp"}};
     for(const auto& [name,path]:shortcuts)if(cyui::sidebarItem(cyui::icon::folder,name,p.remote.folder==path))p.browse(false,path);
-    cyui::divider();cyui::textDim("Dossiers d’une application");cyui::searchField("##packageFiles",p.packageFilter.data(),int(p.packageFilter.size()),"Rechercher un package",-1);
-    if(validPackage(selectedPackage)&&cyui::button("Application de la console"))p.browse(false,"/sdcard/Android/data/"+selectedPackage+"/files");
+    cyui::divider();cyui::textDim("Dossiers d’une application");cyui::searchField("##packageFiles",p.packageFilter.data(),int(p.packageFilter.size()),"Search packages",-1);
+    if(validPackage(selectedPackage)&&cyui::button(cyui::trLabel("Application de la console").c_str()))p.browse(false,"/sdcard/Android/data/"+selectedPackage+"/files");
     if(p.packageFilter[0]){int count=0;for(const auto& app:packages)if(lower(app.name).find(lower(p.packageFilter.data()))!=std::string::npos&&count++<12){if(cyui::ghostButton((app.name+"###data"+app.name).c_str()))p.browse(false,"/sdcard/Android/data/"+app.name+"/files");}}
     cyui::divider();cyui::textFaint("%zu transfert(s) en attente\nCtrl / Maj : sélection multiple\nCtrl+A : fichiers du volet",p.queue.count(TransferState::waiting));
-    if((p.queue.active()||p.queue.count(TransferState::waiting))&&cyui::button("Voir la liste"))p.showQueue=true;
+    if((p.queue.active()||p.queue.count(TransferState::waiting))&&cyui::button(cyui::trLabel("Voir la liste").c_str()))p.showQueue=true;
     cyui::space(8);cyui::textFaint("Les droits Android s’appliquent.\nLes liens ne sont pas suivis.\nTransferts de fichiers réguliers.");
 }
 void FileWorkspace::seedQueueDemo(){auto& p=*impl_;if(!p.demo)return;p.split=p.prepare=p.showQueue=true;for(const auto& [name,direction]:std::vector<std::pair<std::string,TransferDirection>>{{"quest-demo.apk",TransferDirection::upload},{"capture de test.png",TransferDirection::download},{"session-équipe.json",TransferDirection::upload}}){FileTransfer f;f.direction=direction;f.device="DEMO-QUEST-3";f.remote="/sdcard/Download/"+name;f.local=localChild(L"C:\\QuestDev\\Workspace",name);f.size=name.find("apk")!=std::string::npos?137573171:524288;p.queue.add(std::move(f));}p.message="Liste préparée · données de démonstration";}

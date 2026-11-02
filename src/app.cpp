@@ -13,7 +13,9 @@
 #include "quest/mirroring.hpp"
 #include "quest/resources.h"
 #include "quest/version.hpp"
-#include <cyui/CyUI.h>
+#include <cyui/Core.h>
+#include <cyui/modules/DocumentViews.h>
+#include <cyui/modules/Images.h>
 #include <imgui.h>
 #define WIN32_LEAN_AND_MEAN
 #ifndef NOMINMAX
@@ -35,6 +37,7 @@
 #include <sstream>
 
 namespace quest {
+void registerUiTranslations();
 namespace {
 std::wstring fileDialog(bool save, const wchar_t* filter, const wchar_t* extension, const wchar_t* initial = L"") {
     wchar_t path[32768]{}; wcsncpy_s(path,initial,_TRUNCATE);
@@ -75,15 +78,15 @@ struct View {
     uint64_t freeze{},selected{},revision{~uint64_t(0)};
     float lastScroll{-1};
     uint64_t rawRevision{~uint64_t(0)},rawAnchor{};
-    std::string rawText;
+    std::string rawText;TextView rawEditor;
     size_t rawFirst{},rawEnd{};
     std::vector<LogSort> sort{{LogColumn::time,false}};
     bool dirty{true},rawInvalidate{true};
     std::vector<uint64_t> ids;
 };
 struct Counts { int lines{},errors{},warnings{},processes{}; };
-struct Task {uint64_t id{};std::string label,output,kind;bool done{},ok{};int code{};std::wstring path;};
-struct PluginPanel {Json draft=Json::object(),observed=Json::object(),capture=Json::object();std::map<std::string,bool> available;std::string error,message,requestedCapture,controller;uint64_t task{};int group{};};
+struct Task {uint64_t id{};std::string label,output,kind;bool done{},ok{};int code{};std::wstring path;TextView viewer;bool follow{true};};
+struct PluginPanel {TextView viewer;bool follow{};Json draft=Json::object(),observed=Json::object(),capture=Json::object();std::map<std::string,bool> available;std::string error,message,requestedCapture,controller;uint64_t task{};int group{};};
 struct PluginRun {Plugin plugin;std::string action;Json settings;};
 RemoteListing readListing(const std::wstring& path){std::error_code ec;auto bytes=std::filesystem::file_size(path,ec);if(ec||bytes>4*1024*1024)throw std::runtime_error("Liste absente ou trop volumineuse.");std::ifstream in(path,std::ios::binary);return parseFileListing(std::string((std::istreambuf_iterator<char>(in)),{}));}
 }
@@ -147,7 +150,8 @@ struct App::Impl {
     std::array<char,256> aiModel{},aiEndpoint{},aiKeyEnv{},aiKey{};
     std::array<char,1024> aiExecutable{};
     std::array<char,8192> aiPrompt{};
-    std::vector<std::pair<std::string,std::string>> chat;
+    std::vector<cyui::TranscriptMessage> chat;uint64_t nextChatId{1};
+    cyui::TranscriptState mainTranscript,floatingTranscript;cyui::ImageState screenshotView;std::string chatLink;bool confirmChatLink{};
     Json aiModels=Json::array();std::vector<Json> approvals;
     std::map<uint64_t,std::string> nativeJobs;
     std::map<uint64_t,Json> nativeOutputs;
@@ -162,6 +166,8 @@ struct App::Impl {
     std::chrono::steady_clock::time_point updateLaunchTime{};
 
     explicit Impl(Options o) : options(std::move(o)),adb(options.adb.empty()?findAdb():options.adb),page(options.page),compare(options.compare) {
+        registerUiTranslations();
+        cyui::setLocale(options.locale.empty()?(!options.demo&&isFile(settingsPath().wstring())?"fr":"en"):options.locale.c_str());
         if(!options.demo) {
             std::ifstream in(settingsPath());std::string line;
             while(std::getline(in,line)) {
@@ -169,6 +175,8 @@ struct App::Impl {
                 number("log_lines",logLines,1000,5000000);number("log_memory_mb",logMemoryMb,16,2048);
                 if(line=="files_side_by_side=1")filesSplitPreference=true;
                 if(line=="files_prepare_list=1")filesQueuePreference=true;
+                if(line.rfind("locale=",0)==0&&options.locale.empty())cyui::setLocale(line.substr(7).c_str());
+                if(line=="density=compact"&&!options.compact)cyui::setDensity(cyui::Density::compact);
                 if(line.rfind("theme=",0)==0)cyui::setTheme(line.substr(6).c_str());
                 if(line.rfind("adb=",0)==0 && options.adb.empty()) { auto saved=widen(line.substr(4));if(isFile(saved))adb=saved; }
             }
@@ -193,6 +201,13 @@ struct App::Impl {
         else if(isFile((productRoot()/L"runtime/python/Scripts/python.exe").wstring()))startAssistant();
         if(options.updatesSettings)settingsSection=1;
         if(options.logSettings)settingsSection=2;
+        if(options.demo&&options.uiFixtures){
+            preview->loadResource(IDR_QUESTDEV_LOGO,logoError);deviceSection=1;
+            for(const auto& plugin:plugins)if(plugin.id=="meta.ovr-metrics"){auto& panel=pluginPanels[plugin.id];panel.controller=plugin.controller;panel.observed={{"configuration",pluginDefaults(plugin)},{"state",{{"fixture",true},{"fps",90}}}};}
+            appendChat("You","Analyse this **synthetic** Quest session.");
+            appendChat("Assistant","## Frame timing\nThe capture contains **90 FPS** and an isolated GPU spike.\n\n| Metric | Value |\n| --- | --- |\n| FPS | 90 |\n| GPU | 5.4 ms |\n\n```json\n{\"fps\": 90, \"simulated\": true}\n```\n\n[Documentation](https://github.com/MrMybal/CyVR_QuestDev)");
+            tasks[9001]={9001,"ADB · synthetic output","Quest_3\n{\"simulated\": true}\nNo device command was executed.\n","demo",true,true,0,{}};taskOrder.push_back(9001);selectedTask=9001;
+        }
         view.rawMode=second.rawMode=options.logRaw;view.sort=second.sort={{LogColumn(options.logSort),options.logDescending}};
         if(!options.demo){updateBridge=std::make_unique<AssistantBridge>();std::string error;if(!updateBridge->start((productRoot()/L"runtime/python/Scripts/python.exe").wstring(),(productRoot()/L"updater/service.py").wstring(),(userRoot()/L"updates").wstring(),error))updateState["error"]="Le runtime de mise à jour n’est pas disponible. Utilisez une archive portable complète.";}
     }
@@ -200,6 +215,7 @@ struct App::Impl {
     void saveSettings() {
         if(options.demo)return;
         std::ofstream out(settingsPath());out<<"theme="<<cyui::currentThemeKey()<<"\nadb="<<narrow(adb)<<"\n";
+        out<<"locale="<<cyui::locale()<<"\ndensity="<<(cyui::density()==cyui::Density::compact?"compact":"comfortable")<<"\n";
         out<<"log_lines="<<store.capacity()<<"\nlog_memory_mb="<<store.byteLimit()/(1024*1024)<<"\nfiles_side_by_side="<<(files&&files->sideBySide())<<"\nfiles_prepare_list="<<(files&&files->prepareList())<<"\n";
         if(!out)cyui::notify("Impossible de sauvegarder les réglages.",cyui::Tone::error);
     }
@@ -320,7 +336,7 @@ struct App::Impl {
         }
         if(task.ok&&nativeOutputs.count(e.job)&&nativeOutputs[e.job].contains("file")){auto output=widen(nativeOutputs[e.job]["file"].get<std::string>());std::error_code ec;bool directory=nativeOutputs[e.job].value("mimeType",std::string())=="inode/directory";bool exists=directory?std::filesystem::is_directory(output,ec):std::filesystem::is_regular_file(output,ec);if(!exists||ec){task.ok=false;task.output+="\nLe fichier de sortie annoncé n’a pas été créé.";}}
         if(nativeJobs.count(e.job)) {auto id=nativeJobs[e.job];Json result={{"exitCode",e.code}};if(task.kind!="plugin:control")result["output"]=task.output.substr(0,100000);if(nativeOutputs.count(e.job))result.update(nativeOutputs[e.job]);auto error=task.ok?"":task.output.substr(task.kind=="plugin:control"&&task.output.size()>4000?task.output.size()-4000:0,4000);assistant->send({{"type","native_result"},{"id",id},{"ok",task.ok},{"result",result},{"error",error}});nativeJobs.erase(e.job);nativeOutputs.erase(e.job);}
-        if(task.kind=="screenshot" && e.ok){std::string error;preview->load(task.path,error);}
+        if(task.kind=="screenshot" && e.ok){std::string error;if(preview->load(task.path,error))screenshotView=cyui::ImageState{};}
         cyui::notify((task.label+(task.ok?" : terminé":" : échec (voir ADB)")).c_str(),task.ok?cyui::Tone::success:cyui::Tone::error);
     }
     Json contextSnapshot() {
@@ -333,6 +349,7 @@ struct App::Impl {
         context["metricsUsage"]="Metrics page: open OVR CSV, select columns, shared time zoom/pan/cursor. Refresh reports with metrics_action to discover remote paths; read_metrics returns bounded samples (missing=null), seconds from first CSV timestamp. record_metrics waits for CSV collection/restoration, needs a running VR app, and may return filesSaved=0. Follow cadence depends on OVR file writes. Export Core recordings before FinishTask. UI recordings persist on PC.";
         context["fileBrowser"]=files->describe();
         context["logRetention"]={{"maxLines",store.capacity()},{"maxBytes",store.byteLimit()},{"lines",store.entries().size()},{"bytes",store.bytes()},{"discarded",store.discarded()}};
+        context["appearance"]={{"locale",cyui::locale()},{"density",cyui::density()==cyui::Density::compact?"compact":"comfortable"},{"dpi",cyui::dpi()},{"theme",cyui::currentThemeKey()}};
         context["consoleFilters"]={{"search",view.search.data()},{"exclude",view.exclude.data()},{"tag",view.tag.data()},{"minimumIndex",view.minimum},{"pid",view.pid},{"paused",view.paused},{"follow",view.follow},{"showProcessEvents",view.events}};
         context["usage"]={"Files: optional PC/Quest side-by-side browser, Ctrl/Shift multi-selection. Prepare a list to hold transfers, then start/cancel the sequential batch; otherwise transfers start immediately. Queued destinations are bound to their Quest; device changes pause the batch. Browse accessible Quest folders, transfer regular files, create/rename entries and delete files or empty directories. No root access or recursive deletion. Core imports upload sources automatically and owns downloaded task files.","Each page has its own sidebar. Select a package in Console to open its retained application log.","Logs are assigned by timestamped PID lifetime and exact package/subprocess name; unknown origins remain system/unassigned. Shared UIDs do not imply shared applications.","Settings > Limites du journal configures retained lines and memory (logRetention). Pausing a view does not stop capture.","Device Actions uses asynchronous ADB jobs; ADB page shows output, history and cancellation. Cast uses a managed scrcpy H.264 video/audio window.","Plugins are validated .cyplugin manifests; an ADB tunnel requires an actual TCP service in the target app.","Core operation files belong to private tasks. Export results before FinishTask deletes temporary files.","Native QuestDev tool calls are available in Codex. Other integrated providers currently receive text context; external AI clients can use the MCP catalogue."};
         for(const auto& d:devices)context["devices"].push_back({{"serial",d.serial},{"state",d.state},{"model",d.model}});
@@ -348,6 +365,7 @@ struct App::Impl {
         else assistantStatus=error;
     }
     void replyNative(const std::string& id,bool ok,const Json& result=Json::object(),const std::string& error=""){assistant->send({{"type","native_result"},{"id",id},{"ok",ok},{"result",result},{"error",error}});}
+    void appendChat(const std::string& role,const std::string& content){chat.push_back({nextChatId++,role,content,{}});}
     void tickAssistant() {
         if(!assistant)return;
         for(auto& e:assistant->poll()){
@@ -356,12 +374,17 @@ struct App::Impl {
             else if(type=="connected"){assistantConnected=true;assistantStatus=e.value("connector",std::string())+" connecté";aiModels=e.value("models",Json::array());if(aiModel[0]==0)strncpy_s(aiModel.data(),aiModel.size(),e.value("model",std::string()).c_str(),_TRUNCATE);}
             else if(type=="idle")assistantBusy=false;
             else if(type=="new_chat")chat.clear();
-            else if(type=="error"){assistantStatus=e.value("message",std::string());assistantBusy=false;chat.push_back({"Erreur",assistantStatus});}
+            else if(type=="error"){assistantStatus=e.value("message",std::string());assistantBusy=false;appendChat("Error",assistantStatus);}
             else if(type=="provider_event"){
                 auto record=e.value("event",Json::object());auto kind=record.value("type",std::string());
-                if(kind=="TextDelta"){if(chat.empty()||chat.back().first!="Assistant")chat.push_back({"Assistant",""});chat.back().second+=record.value("text",std::string());}
-            }else if(type=="chat_done"){auto answer=e.value("text",std::string());auto lastUser=std::find_if(chat.rbegin(),chat.rend(),[](const auto& line){return line.first=="Vous";});auto start=lastUser==chat.rend()?chat.begin():lastUser.base();chat.erase(std::remove_if(start,chat.end(),[](const auto& line){return line.first=="Assistant";}),chat.end());chat.push_back({"Assistant",answer});}
-            else if(type=="assistant_tool")chat.push_back({"Outil",e.value("operation",std::string())+" · "+e.value("status",std::string())});
+                if(kind=="TextDelta"){if(chat.empty()||chat.back().role!="Assistant")appendChat("Assistant","");chat.back().content+=record.value("text",std::string());}
+            }else if(type=="chat_done"){
+                auto answer=e.value("text",std::string());auto lastUser=std::find_if(chat.rbegin(),chat.rend(),[](const auto& line){return line.role=="You";});auto start=lastUser==chat.rend()?chat.begin():lastUser.base();
+                uint64_t answerId{};for(auto it=start;it!=chat.end();++it)if(it->role=="Assistant")answerId=it->id;
+                chat.erase(std::remove_if(start,chat.end(),[](const auto& line){return line.role=="Assistant";}),chat.end());
+                chat.push_back({answerId?answerId:nextChatId++,"Assistant",answer,{}});
+            }
+            else if(type=="assistant_tool")appendChat("Tool",e.value("operation",std::string())+" · "+e.value("status",std::string()));
             else if(type=="native_call"){
                 if(e.value("deviceSession",uint64_t(0))!=session){replyNative(e.value("id",std::string()),false,Json::object(),"Le casque sélectionné a changé.");continue;}
                 auto op=e.value("operation",std::string());auto parameters=e.value("parameters",Json::object());auto action=parameters.value("action",std::string());
@@ -511,9 +534,9 @@ struct App::Impl {
     void topbar() {
         if(cyui::beginTopBar("##top",cyui::dp(62))) {
             if(appLogo->texture()){ImGui::Image(static_cast<ImTextureID>(appLogo->texture()),cyui::dp(44,44));ImGui::SameLine(0,cyui::dp(10));}
-            ImGui::BeginGroup();cyui::heading("CyVR QuestDev",2);cyui::textFaint("OUTILS DÉVELOPPEUR / META QUEST");ImGui::EndGroup();
+            ImGui::BeginGroup();cyui::heading(cyui::tr("CyVR QuestDev").c_str(),2);cyui::textFaint("OUTILS DÉVELOPPEUR / META QUEST");ImGui::EndGroup();
             ImGui::SameLine(0,cyui::dp(16));
-            const char* pages[]={"Console","Applications","Réglages","Appareil","ADB","Plugins","Assistant IA","Fichiers","Métriques"};cyui::segmented("##pages",pages,9,&page,cyui::dp(740));
+            const char* pages[]={"Console","Applications","Settings","Device","ADB","Plugins","AI assistant","Files","Metrics"};cyui::segmented("##pages",pages,9,&page,cyui::dp(740));
             ImGui::SameLine();cyui::alignRight(cyui::dp(300));
             ImGui::SetNextItemWidth(cyui::dp(255));
             std::string label=serial.empty()?"Sélectionner un casque":serial;
@@ -544,12 +567,12 @@ struct App::Impl {
         }cyui::endStatusBar();
     }
     void applicationList() {
-        cyui::overline("APPLICATIONS");cyui::space(5);
-        if(cyui::searchField("##apps",appSearch.data(),int(appSearch.size()),"Rechercher un package",-1)){}
-        const char* modes[]={"Actives","Installées","Système"};cyui::segmented("##appsMode",modes,3,&appMode,-1);
+        cyui::overline(cyui::tr("APPLICATIONS").c_str());cyui::space(5);
+        if(cyui::searchField("##apps",appSearch.data(),int(appSearch.size()),"Search packages",-1)){}
+        const char* modes[]={"Running","Installed","System"};cyui::segmented("##appsMode",modes,3,&appMode,-1);
         cyui::space(8);
-        if(cyui::sidebarItem(cyui::icon::library,"Toutes les applications",view.package.empty()))openApp("");
-        if(cyui::sidebarItem(cyui::icon::code,"Système / non attribué",view.package=="@system"))openApp("@system");
+        if(cyui::sidebarItem(cyui::icon::library,cyui::trLabel("All applications").c_str(),view.package.empty()))openApp("");
+        if(cyui::sidebarItem(cyui::icon::code,cyui::trLabel("System / unassigned").c_str(),view.package=="@system"))openApp("@system");
         cyui::divider();
         ImGui::BeginChild("##appList",ImVec2(0,-cyui::dp(90)));
         int shown=0;std::string query=lower(appSearch.data());
@@ -571,12 +594,12 @@ struct App::Impl {
         }
         if(!shown) {
             cyui::space(12);cyui::textDim("%s",online?"Aucune application correspondante.":"Connectez un casque pour\nvoir ses applications.");
-            if(appMode==0) {cyui::space(8);if(cyui::ghostButton("Voir les applications installées"))appMode=1;}
+            if(appMode==0) {cyui::space(8);if(cyui::ghostButton(cyui::trLabel("Voir les applications installées").c_str()))appMode=1;}
         }
         ImGui::EndChild();cyui::divider();
         cyui::textFaint("%d applications · %zu processus",shown,store.processes().size());
         cyui::ScopedDisabled disabled(!online||options.demo);
-        if(cyui::primaryButton("Installer un APK",ImVec2(-1,0)))install();
+        if(cyui::primaryButton(cyui::trLabel("Install APK").c_str(),ImVec2(-1,0)))install();
     }
     void viewTabs() {
         ImGui::SetNextItemWidth(cyui::dp(200));
@@ -588,7 +611,7 @@ struct App::Impl {
                 if(ImGui::BeginTabItem((title+"###"+p).c_str(),open,flags)) { if((!tabRequest || requested==p) && view.package!=p){view.package=p;view.dirty=true;}ImGui::EndTabItem(); }
                 cyui::tooltip(p.empty()?"Tous les messages":p=="@system"?"Messages sans application identifiée":p.c_str());
             };
-            tab("","Tout",nullptr);tab("@system","Système",nullptr);
+            tab("","All",nullptr);tab("@system","System",nullptr);
             for(auto it=tabs.begin();it!=tabs.end();) { bool open=true;tab(*it,shortName(*it),&open);if(!open){if(view.package==*it){openApp("");closedActive=true;}it=tabs.erase(it);}else ++it; }
             ImGui::EndTabBar();
             tabRequest=closedActive;
@@ -596,37 +619,37 @@ struct App::Impl {
     }
     void toolbar(View& v,bool compact) {
         ImGui::PushID(&v);
-        if(cyui::searchField("##text",v.search.data(),int(v.search.size()),"Chercher dans les messages…",std::max(cyui::dp(130),ImGui::GetContentRegionAvail().x-cyui::dp(compact?235.0f:390.0f))))v.dirty=true;
+        if(cyui::searchField("##text",v.search.data(),int(v.search.size()),"Search messages…",std::max(cyui::dp(130),ImGui::GetContentRegionAvail().x-cyui::dp(compact?235.0f:390.0f))))v.dirty=true;
         ImGui::SameLine();
         const char* levels[]={"Verbose +","Debug +","Info +","Warning +","Error +","Fatal"};
         if(cyui::combo("##level",&v.minimum,levels,6,cyui::dp(105)))v.dirty=true;
         ImGui::SameLine();
         if(cyui::iconButton(v.paused?cyui::icon::play:cyui::icon::pause,"Suspendre / reprendre l’affichage (Espace)",v.paused))pause(v);
-        ImGui::SameLine();if(cyui::iconButton(cyui::icon::download,"Exporter la vue filtrée (Ctrl+S)"))ImGui::OpenPopup("##export");
+        ImGui::SameLine();if(cyui::iconButton(cyui::icon::download,"Export filtered view (Ctrl+S)"))ImGui::OpenPopup("##export");
         if(ImGui::BeginPopup("##export")){if(ImGui::MenuItem("Texte (.log)"))exportView(v,false);if(ImGui::MenuItem("JSON Lines (.jsonl)"))exportView(v,true);ImGui::EndPopup();}
         if(!compact) {
-            ImGui::SameLine();if(cyui::iconButton(cyui::icon::copy,"Copier toutes les lignes filtrées (Ctrl+Maj+C)"))ImGui::SetClipboardText(viewText(v).c_str());
+            ImGui::SameLine();if(cyui::iconButton(cyui::icon::copy,"Copy all filtered lines (Ctrl+Shift+C)"))ImGui::SetClipboardText(viewText(v).c_str());
             ImGui::SameLine();if(cyui::iconButton(cyui::icon::trash,"Vider le journal local (Ctrl+L)")){store.clear();detail.reset();}
         }
         ImGui::SameLine();if(cyui::iconButton(cyui::icon::filter,"Filtres avancés (clic)",v.exclude[0]||v.tag[0]||v.pid>0||v.events))ImGui::OpenPopup("##filters");
         if(ImGui::BeginPopup("##filters")) {
-            cyui::sectionTitle("Filtres avancés");
-            if(cyui::beginProperties("##filterProps",cyui::dp(115))) {
-                cyui::property("Exclure");if(ImGui::InputText("##exclude",v.exclude.data(),v.exclude.size()))v.dirty=true;
-                cyui::property("Tag");if(ImGui::InputText("##tag",v.tag.data(),v.tag.size()))v.dirty=true;
-                cyui::property("PID (0 = tous)");if(ImGui::InputInt("##pid",&v.pid))v.dirty=true;
-                cyui::property("Événements Android");if(cyui::toggleSwitch("##events",&v.events))v.dirty=true;
+            cyui::sectionTitle(cyui::tr("Advanced filters").c_str());
+            if(cyui::beginProperties("##filterProps",115)) {
+                cyui::property(cyui::tr("Exclude").c_str());if(ImGui::InputText("##exclude",v.exclude.data(),v.exclude.size()))v.dirty=true;
+                cyui::property(cyui::tr("Tag").c_str());if(ImGui::InputText("##tag",v.tag.data(),v.tag.size()))v.dirty=true;
+                cyui::property(cyui::tr("PID (0 = tous)").c_str());if(ImGui::InputInt("##pid",&v.pid))v.dirty=true;
+                cyui::property(cyui::tr("Android events").c_str());if(cyui::toggleSwitch("##events",&v.events))v.dirty=true;
                 cyui::endProperties();
             }
             cyui::textFaint("Recherche textuelle sans distinction de casse.");
-            if(cyui::ghostButton("Réinitialiser les filtres")){v.search.fill(0);v.tag.fill(0);v.exclude.fill(0);v.pid=0;v.minimum=0;v.events=false;v.dirty=true;}
+            if(cyui::ghostButton(cyui::trLabel("Reset filters").c_str())){v.search.fill(0);v.tag.fill(0);v.exclude.fill(0);v.pid=0;v.minimum=0;v.events=false;v.dirty=true;}
             ImGui::EndPopup();
         }
         ImGui::PopID();
     }
     void rawLogs(View& v,float footer){
-        if(v.rawInvalidate){clearRawLogSelection();v.rawInvalidate=false;v.rawTail=true;v.rawRevision=~uint64_t(0);v.lastScroll=-1;}
-        bool selected=rawLogSelection();
+        if(v.rawInvalidate){v.rawEditor.clearSelection();v.rawInvalidate=false;v.rawTail=true;v.rawRevision=~uint64_t(0);v.lastScroll=-1;}
+        bool selected=v.rawEditor.selected();
         auto rebuild=[&]{
             v.rawEnd=v.ids.size();if(!v.rawTail){auto end=std::upper_bound(v.ids.begin(),v.ids.end(),v.rawAnchor);v.rawEnd=size_t(end-v.ids.begin());}
             v.rawFirst=v.rawEnd;size_t bytes=0;
@@ -635,19 +658,19 @@ struct App::Impl {
             v.rawRevision=store.revision();
         };
         if(!selected&&v.rawRevision!=store.revision())rebuild();
-        {cyui::ScopedDisabled disabled(v.rawFirst==0||selected);if(cyui::button("Précédentes")){v.rawTail=false;v.rawAnchor=v.ids[v.rawFirst-1];v.follow=false;v.lastScroll=-1;rebuild();}}
-        ImGui::SameLine();{cyui::ScopedDisabled disabled(v.rawEnd>=v.ids.size()||selected);if(cyui::button("Suivantes")){size_t end=v.rawEnd,bytes=0;while(end<v.ids.size()&&end-v.rawEnd<10000){auto* entry=find(v.ids[end]);if(!entry)break;auto n=rawLog(*entry).size()+1;if(bytes+n>2*1024*1024&&bytes)break;bytes+=n;++end;}v.rawTail=end==v.ids.size();if(end)v.rawAnchor=v.ids[end-1];v.lastScroll=-1;rebuild();}}
-        ImGui::SameLine();cyui::textFaint("RAW %zu–%zu / %zu",v.rawEnd?v.rawFirst+1:0,v.rawEnd,v.ids.size());ImGui::SameLine();cyui::helpMarker("Sélection à la souris, Ctrl+A pour la page, Ctrl+C pour copier. Les boutons Copier et Exporter incluent toute la vue filtrée.");
-        if(selected){ImGui::SameLine();if(cyui::ghostButton("Libérer la sélection")){clearRawLogSelection();v.rawRevision=~uint64_t(0);}}
-        cyui::ScopedFont font(cyui::monoFont());v.rawSelected=drawRawLog(v.rawText,v.follow,v.paused,v.lastScroll,ImVec2(-1,-footer),cyui::dp(2));
+        {cyui::ScopedDisabled disabled(v.rawFirst==0||selected);if(cyui::button(cyui::trLabel("Previous").c_str())){v.rawTail=false;v.rawAnchor=v.ids[v.rawFirst-1];v.follow=false;v.lastScroll=-1;rebuild();}}
+        ImGui::SameLine();{cyui::ScopedDisabled disabled(v.rawEnd>=v.ids.size()||selected);if(cyui::button(cyui::trLabel("Next").c_str())){size_t end=v.rawEnd,bytes=0;while(end<v.ids.size()&&end-v.rawEnd<10000){auto* entry=find(v.ids[end]);if(!entry)break;auto n=rawLog(*entry).size()+1;if(bytes+n>2*1024*1024&&bytes)break;bytes+=n;++end;}v.rawTail=end==v.ids.size();if(end)v.rawAnchor=v.ids[end-1];v.lastScroll=-1;rebuild();}}
+        ImGui::SameLine();cyui::textFaint("RAW %zu–%zu / %zu",v.rawEnd?v.rawFirst+1:0,v.rawEnd,v.ids.size());ImGui::SameLine();cyui::helpMarker(cyui::tr("Sélection à la souris, Ctrl+A pour la page, Ctrl+C pour copier. Les boutons Copier et Exporter incluent toute la vue filtrée.").c_str());
+        if(selected){ImGui::SameLine();if(cyui::ghostButton(cyui::trLabel("Release selection").c_str())){v.rawEditor.clearSelection();v.rawRevision=~uint64_t(0);}}
+        cyui::ScopedFont font(cyui::monoFont());v.rawSelected=drawRawLog(v.rawEditor,v.rawText,v.follow,v.paused,v.lastScroll,ImVec2(-1,-footer),cyui::dp(2));
         if(v.follow&&!v.rawTail){v.rawTail=true;v.rawRevision=~uint64_t(0);}
         if(!v.follow&&v.rawTail&&v.rawEnd){v.rawTail=false;v.rawAnchor=v.ids[v.rawEnd-1];}
     }
     void logTable(View& v,bool compact) {
         ImGui::PushID(&v);updateView(v);
-        auto title=v.package.empty()?"Tous les messages":v.package=="@system"?"Système / non attribué":v.package;
+        auto title=v.package.empty()?"Tous les messages":v.package=="@system"?"System / unassigned":v.package;
         cyui::textDim("%s",title.c_str());
-        ImGui::SameLine();const char* modes[]={"Colonnes","RAW"};int mode=v.rawMode?1:0;
+        ImGui::SameLine();const char* modes[]={"Columns","RAW"};int mode=v.rawMode?1:0;
         if(cyui::segmented("##logMode",modes,2,&mode,cyui::dp(160))){v.rawMode=mode==1;v.dirty=true;v.lastScroll=-1;v.rawTail=true;updateView(v);}
         cyui::tooltip("RAW : texte Logcat original sélectionnable. Colonnes : cliquer un en-tête pour trier, Maj pour combiner les tris.");
         toolbar(v,compact);
@@ -657,18 +680,18 @@ struct App::Impl {
         float footer=ImGui::GetFrameHeightWithSpacing();
         if(v.ids.empty()) {
             ImGui::BeginChild("##empty",ImVec2(0,-footer));
-            cyui::emptyState(store.entries().empty()?"En attente de messages":"Aucun message avec ces filtres",store.entries().empty()?(online?"Lancez une application sur le casque. Les messages apparaîtront ici.":"Branchez le Quest en USB, activez le mode développeur et acceptez le débogage dans le casque."):"Modifiez la recherche, la sévérité ou l’application sélectionnée.",cyui::icon::document);
+            cyui::emptyState(store.entries().empty()?"Waiting for messages":"No messages match these filters",store.entries().empty()?(online?"Lancez une application sur le casque. Les messages apparaîtront ici.":"Branchez le Quest en USB, activez le mode développeur et acceptez le débogage dans le casque."):"Modifiez la recherche, la sévérité ou l’application sélectionnée.",cyui::icon::document);
             ImGui::EndChild();
         } else if(v.rawMode)rawLogs(v,footer);
         else if(ImGui::BeginTable("##log",compact?5:6,flags,ImVec2(0,-footer))) {
             ImGui::TableSetupScrollFreeze(0,1);
             auto columnFlags=[&](LogColumn column){return ImGuiTableColumnFlags_WidthFixed|(int(column)==options.logSort?ImGuiTableColumnFlags_DefaultSort|(options.logDescending?ImGuiTableColumnFlags_PreferSortDescending:0):0);};
-            ImGui::TableSetupColumn("Heure locale",columnFlags(LogColumn::time),cyui::dp(104),unsigned(LogColumn::time));
+            ImGui::TableSetupColumn(cyui::trLabel("Local time").c_str(),columnFlags(LogColumn::time),cyui::dp(104),unsigned(LogColumn::time));
             ImGui::TableSetupColumn("Niv.",columnFlags(LogColumn::level),cyui::dp(36),unsigned(LogColumn::level));
             ImGui::TableSetupColumn("PID / TID",columnFlags(LogColumn::pid),cyui::dp(85),unsigned(LogColumn::pid));
-            if(!compact)ImGui::TableSetupColumn("Application",columnFlags(LogColumn::application),cyui::dp(160),unsigned(LogColumn::application));
+            if(!compact)ImGui::TableSetupColumn(cyui::trLabel("Application").c_str(),columnFlags(LogColumn::application),cyui::dp(160),unsigned(LogColumn::application));
             ImGui::TableSetupColumn("Tag",columnFlags(LogColumn::tag),cyui::dp(compact?100.0f:135.0f),unsigned(LogColumn::tag));
-            ImGui::TableSetupColumn("Message",columnFlags(LogColumn::message),cyui::dp(compact?620.0f:950.0f),unsigned(LogColumn::message));
+            ImGui::TableSetupColumn(cyui::trLabel("Message").c_str(),columnFlags(LogColumn::message),cyui::dp(compact?620.0f:950.0f),unsigned(LogColumn::message));
             ImGui::TableHeadersRow();
             if(auto* specs=ImGui::TableGetSortSpecs();specs&&specs->SpecsDirty){v.sort.clear();for(int i=0;i<specs->SpecsCount;++i){const auto& s=specs->Specs[i];v.sort.push_back({LogColumn(s.ColumnUserID),s.SortDirection==ImGuiSortDirection_Descending});}v.dirty=true;updateView(v);specs->SpecsDirty=false;v.lastScroll=-1;}
             {
@@ -678,7 +701,7 @@ struct App::Impl {
                 auto* e=find(v.ids[size_t(i)]);if(!e)continue;
                 ImGui::TableNextRow();ImGui::TableNextColumn();ImGui::PushID(int(e->id));
                 if(ImGui::Selectable(clockText(e->epoch).c_str(),v.selected==e->id,ImGuiSelectableFlags_SpanAllColumns|ImGuiSelectableFlags_AllowDoubleClick)) {v.selected=e->id;detail=*e;if(ImGui::IsMouseDoubleClicked(0))detailsOpen=true;}
-                if(ImGui::BeginPopupContextItem("##rowMenu")) {if(ImGui::MenuItem("Copier la ligne"))ImGui::SetClipboardText(formatLog(*e).c_str());if(ImGui::MenuItem("Inspecter")){detail=*e;detailsOpen=true;}ImGui::EndPopup();}
+                if(ImGui::BeginPopupContextItem("##rowMenu")) {if(ImGui::MenuItem(cyui::trLabel("Copy line").c_str()))ImGui::SetClipboardText(formatLog(*e).c_str());if(ImGui::MenuItem(cyui::trLabel("Inspect").c_str())){detail=*e;detailsOpen=true;}ImGui::EndPopup();}
                 ImGui::TableNextColumn();const auto& p=cyui::palette();auto color=severity(e->level)>=4?p.error:e->level=='W'?p.warning:e->level=='D'||e->level=='V'?p.textFaint:p.text;
                 cyui::textColoured(color,"%c",e->level);
                 ImGui::TableNextColumn();cyui::textFaint("%d/%d",e->pid,e->tid);
@@ -692,23 +715,23 @@ struct App::Impl {
             ImGui::EndTable();
         }
         cyui::textFaint("%zu lignes",v.ids.size());ImGui::SameLine(0,cyui::dp(20));
-        {bool chronological=v.rawMode||(v.sort.size()==1&&v.sort[0].column==LogColumn::time&&!v.sort[0].descending);cyui::ScopedDisabled disabled(!chronological);if(cyui::toggleSwitch("Suivre le direct",&v.follow)&&v.follow){clearRawLogSelection();v.rawTail=true;v.rawRevision=~uint64_t(0);v.lastScroll=-1;}}
+        {bool chronological=v.rawMode||(v.sort.size()==1&&v.sort[0].column==LogColumn::time&&!v.sort[0].descending);cyui::ScopedDisabled disabled(!chronological);if(cyui::toggleSwitch(cyui::trLabel("Follow live").c_str(),&v.follow)&&v.follow){v.rawEditor.clearSelection();v.rawTail=true;v.rawRevision=~uint64_t(0);v.lastScroll=-1;}}
         cyui::tooltip("Le suivi se suspend en remontant et reprend au retour en bas. En colonnes, triez par Heure locale croissante pour suivre le direct.");
         if(!wasFollowing&&v.follow)v.dirty=true;
-        if(v.selected){ImGui::SameLine();if(cyui::ghostButton("Inspecter")){if(auto* e=find(v.selected))detail=*e;detailsOpen=true;}}
+        if(v.selected){ImGui::SameLine();if(cyui::ghostButton(cyui::trLabel("Inspect").c_str())){if(auto* e=find(v.selected))detail=*e;detailsOpen=true;}}
         ImGui::PopID();
     }
     void console() {
         cyui::panelHeader("Console", "Un journal par application. Tous les processus, une seule capture.");
-        ImGui::SameLine();cyui::alignRight(cyui::dp(145));ImGui::Checkbox("Côte à côte",&compare);
+        ImGui::SameLine();cyui::alignRight(cyui::dp(145));ImGui::Checkbox(cyui::trLabel("Side by side").c_str(),&compare);
         if(options.demo)cyui::callout(cyui::Tone::info,"Mode démonstration · les applications et les messages sont simulés.");
         viewTabs();
         if(compare) {
             auto selector=[&](View& selected,bool main) {
-                ImGui::PushID(&selected);ImGui::SetNextItemWidth(-1);std::string label=selected.package.empty()?"Toutes les applications":selected.package=="@system"?"Système / non attribué":selected.package;
+                ImGui::PushID(&selected);ImGui::SetNextItemWidth(-1);std::string label=selected.package.empty()?"All applications":selected.package=="@system"?"System / unassigned":selected.package;
                 if(ImGui::BeginCombo("##appSelect",label.c_str())) {
                     auto choose=[&](const std::string& p,const char* name){if(ImGui::Selectable(name,selected.package==p)){if(main)openApp(p);else{selected.package=p;selected.dirty=true;}}};
-                    choose("","Toutes les applications");choose("@system","Système / non attribué");
+                    choose("","All applications");choose("@system","System / unassigned");
                     for(const auto& p:packages)choose(p.name,p.name.c_str());ImGui::EndCombo();
                 }ImGui::PopID();
             };
@@ -722,19 +745,19 @@ struct App::Impl {
     }
     void applications() {
         cyui::panelHeader("Applications", "Lancer, arrêter et installer depuis le casque sélectionné.");cyui::space(10);
-        cyui::searchField("##managementSearch",managementSearch.data(),int(managementSearch.size()),"Rechercher une application",-1);
+        cyui::searchField("##managementSearch",managementSearch.data(),int(managementSearch.size()),"Search applications",-1);
         std::vector<const Package*> shown;size_t categoryCount=0;auto search=lower(managementSearch.data());
         for(const auto& p:packages){if(applicationCategory==0&&p.system)continue;if(applicationCategory==1&&counts[p.name].processes==0)continue;if(applicationCategory==2&&!p.system)continue;++categoryCount;if(lower(p.name).find(search)!=std::string::npos)shown.push_back(&p);}
         cyui::textDim("%zu affichée(s) / %zu dans cette catégorie · %zu applications installées",shown.size(),categoryCount,packages.size());
-        if(packages.empty()){cyui::emptyState("Aucune application disponible","Connectez un casque autorisé pour charger les packages.",cyui::icon::library);return;}
-        if(shown.empty()){cyui::emptyState("Aucune application dans cette liste","Modifiez la catégorie ou la recherche.",cyui::icon::search);return;}
+        if(packages.empty()){cyui::emptyState(cyui::tr("Aucune application disponible").c_str(),cyui::tr("Connectez un casque autorisé pour charger les packages.").c_str(),cyui::icon::library);return;}
+        if(shown.empty()){cyui::emptyState(cyui::tr("Aucune application dans cette liste").c_str(),cyui::tr("Modifiez la catégorie ou la recherche.").c_str(),cyui::icon::search);return;}
         if(ImGui::BeginTable("##packages",5,ImGuiTableFlags_ScrollY|ImGuiTableFlags_RowBg|ImGuiTableFlags_Resizable,ImVec2(0,-cyui::dp(75)))) {
             ImGui::TableSetupScrollFreeze(0,1);ImGui::TableSetupColumn("Package",ImGuiTableColumnFlags_WidthStretch);ImGui::TableSetupColumn("État",ImGuiTableColumnFlags_WidthFixed,cyui::dp(100));ImGui::TableSetupColumn("UID",ImGuiTableColumnFlags_WidthFixed,cyui::dp(65));ImGui::TableSetupColumn("Logs",ImGuiTableColumnFlags_WidthFixed,cyui::dp(65));ImGui::TableSetupColumn("Actions",ImGuiTableColumnFlags_WidthFixed,cyui::dp(205));ImGui::TableHeadersRow();
             for(const auto* item:shown) {const auto& p=*item;
                 auto c=counts[p.name];ImGui::PushID(p.name.c_str());ImGui::TableNextRow();ImGui::TableNextColumn();ImGui::TextUnformatted(p.name.c_str());
-                ImGui::TableNextColumn();cyui::badge(c.processes?"Active":p.system?"Système":"Installée",c.processes?cyui::Tone::success:cyui::Tone::neutral);
+                ImGui::TableNextColumn();cyui::badge(c.processes?"Active":p.system?"System":"Installée",c.processes?cyui::Tone::success:cyui::Tone::neutral);
                 ImGui::TableNextColumn();cyui::textDim("%d",p.uid);ImGui::TableNextColumn();cyui::textDim("%d",c.lines);ImGui::TableNextColumn();
-                if(cyui::ghostButton("Logs")){openApp(p.name);page=0;}ImGui::SameLine();
+                if(cyui::ghostButton(cyui::trLabel("Logs").c_str())){openApp(p.name);page=0;}ImGui::SameLine();
                 {cyui::ScopedDisabled disabled(!online||options.demo);if(cyui::iconButton(cyui::icon::play,"Lancer l’application (clic)"))backend->action("launch",p.name);ImGui::SameLine();if(cyui::iconButton(cyui::icon::stop,"Forcer l’arrêt de l’application (clic)")){pendingStop=p.name;confirmStop=true;}}
                 ImGui::PopID();
             }ImGui::EndTable();
@@ -747,46 +770,46 @@ struct App::Impl {
         if(page==1){
             size_t userCount=0,systemCount=0,activeCount=0;for(const auto& p:packages){if(p.system)++systemCount;else ++userCount;if(counts[p.name].processes)++activeCount;}
             auto category=[&](const char* icon,const char* name,int value,size_t count){auto badge=std::to_string(count);if(cyui::sidebarItem(icon,name,applicationCategory==value,badge.c_str()))applicationCategory=value;};
-            cyui::overline("GESTION DES APPLICATIONS");cyui::space(10);category(cyui::icon::library,"Apps utilisateur",0,userCount);category(cyui::icon::play,"En cours d’exécution",1,activeCount);category(cyui::icon::code,"Packages système",2,systemCount);category(cyui::icon::viewAll,"Tous les packages",3,packages.size());
-            cyui::divider();{cyui::ScopedDisabled disabled(!online||options.demo);if(cyui::primaryButton("Installer un APK",ImVec2(-1,0)))install();if(cyui::button("Actualiser les packages",cyui::Variant::secondary,ImVec2(-1,0)))backend->refresh();}
+            cyui::overline(cyui::tr("Applications management").c_str());cyui::space(10);category(cyui::icon::library,"User apps",0,userCount);category(cyui::icon::play,"Running apps",1,activeCount);category(cyui::icon::code,"System packages",2,systemCount);category(cyui::icon::viewAll,"All packages",3,packages.size());
+            cyui::divider();{cyui::ScopedDisabled disabled(!online||options.demo);if(cyui::primaryButton(cyui::trLabel("Install APK").c_str(),ImVec2(-1,0)))install();if(cyui::button(cyui::trLabel("Refresh packages").c_str(),cyui::Variant::secondary,ImVec2(-1,0)))backend->refresh();}
             cyui::space(10);cyui::textFaint("%zu packages détectés",packages.size());
         }else if(page==3){
-            cyui::overline("APPAREIL");cyui::space(10);item(cyui::icon::home,"Device Actions",deviceSection,0);item(cyui::icon::video,"Capture et diffusion",deviceSection,1);item(cyui::icon::clock,"Performance et traces",deviceSection,2);item(cyui::icon::settings,"Runtime et connexion",deviceSection,3);
+            cyui::overline(cyui::tr("APPAREIL").c_str());cyui::space(10);item(cyui::icon::home,"Device Actions",deviceSection,0);item(cyui::icon::video,"Capture et diffusion",deviceSection,1);item(cyui::icon::clock,"Performance et traces",deviceSection,2);item(cyui::icon::settings,"Runtime et connexion",deviceSection,3);
             cyui::divider();cyui::textDim("%s",serial.empty()?"Aucun casque sélectionné":serial.c_str());cyui::textFaint("%s",online?"Connexion ADB active":"Hors ligne");
         }else if(page==4){
-            cyui::overline("TERMINAL ADB");cyui::space(10);cyui::textFaint("Commandes rapides");
+            cyui::overline(cyui::tr("TERMINAL ADB").c_str());cyui::space(10);cyui::textFaint(cyui::tr("Quick commands").c_str());
             const std::pair<const char*,const char*> commands[]={{"Propriétés Android","getprop"},{"Batterie","dumpsys battery"},{"Stockage","df -h /sdcard"},{"Processus","ps -A -o PID,UID,NAME"},{"Activité courante","dumpsys activity activities"},{"Liaisons TCP","forward --list"}};
             for(const auto& preset:commands)if(cyui::sidebarItem(cyui::icon::code,preset.first,false)){strncpy_s(command.data(),command.size(),preset.second,_TRUNCATE);terminalMode=std::string(preset.second).rfind("forward",0)==0?1:0;}
             cyui::divider();cyui::textFaint("HISTORIQUE");
             for(auto it=taskOrder.rbegin();it!=taskOrder.rend();++it){auto& t=tasks[*it];if(t.kind=="info")continue;ImGui::PushID(int(t.id));if(ImGui::Selectable(((t.done?(t.ok?"OK  ":"ERR "):"…  ")+t.label).c_str(),selectedTask==t.id))selectedTask=t.id;ImGui::PopID();}
         }else if(page==5){
-            cyui::overline("PLUGINS");cyui::space(10);if(cyui::button("Créer un plugin",cyui::Variant::secondary,ImVec2(-1,0)))newPlugin=true;if(cyui::button("Recharger",cyui::Variant::secondary,ImVec2(-1,0)))reloadPlugins();if(cyui::ghostButton("Ouvrir le dossier utilisateur")){auto dir=userRoot()/L"plugins";std::filesystem::create_directories(dir);openLocal(dir);}cyui::divider();
+            cyui::overline(cyui::tr("PLUGINS").c_str());cyui::space(10);if(cyui::button(cyui::trLabel("Créer un plugin").c_str(),cyui::Variant::secondary,ImVec2(-1,0)))newPlugin=true;if(cyui::button(cyui::trLabel("Recharger").c_str(),cyui::Variant::secondary,ImVec2(-1,0)))reloadPlugins();if(cyui::ghostButton(cyui::trLabel("Ouvrir le dossier utilisateur").c_str())){auto dir=userRoot()/L"plugins";std::filesystem::create_directories(dir);openLocal(dir);}cyui::divider();
             for(size_t i=0;i<plugins.size();++i){auto& p=plugins[i];ImGui::PushID(int(i));if(cyui::sidebarItem(cyui::icon::library,p.name.empty()?p.path.filename().string().c_str():p.name.c_str(),selectedPlugin==int(i),!p.error.empty()?"!":configurablePlugin(p)?"HUD":"ADB"))selectedPlugin=int(i);ImGui::PopID();}
         }else if(page==2){
-            cyui::overline("RÉGLAGES");cyui::space(10);item(cyui::icon::settings,"Général",settingsSection,0);item(cyui::icon::document,"Limites du journal",settingsSection,2);item(cyui::icon::download,"Mises à jour GitHub",settingsSection,1);cyui::divider();if(cyui::sidebarItem(cyui::icon::code,"MCP / SDK et IA",false))page=6;cyui::textFaint("CyUI · Dear ImGui\nCyToolsCore · MIT");
+            cyui::overline(cyui::tr("RÉGLAGES").c_str());cyui::space(10);item(cyui::icon::settings,"General",settingsSection,0);item(cyui::icon::document,"Log limits",settingsSection,2);item(cyui::icon::download,"GitHub updates",settingsSection,1);cyui::divider();if(cyui::sidebarItem(cyui::icon::code,cyui::trLabel("MCP / SDK et IA").c_str(),false))page=6;cyui::textFaint("CyUI · Dear ImGui\nCyToolsCore · MIT");
         }else if(page==8){metrics->sidebar();
         }else if(page==7){
             files->sidebar(packages,view.package);
         }else {
-            cyui::overline("ASSISTANT IA");cyui::space(10);
-            if(cyui::button("Nouvelle discussion",cyui::Variant::secondary,ImVec2(-1,0))){if(assistantReady&&!assistantBusy){assistantBusy=true;assistant->send({{"type","new_chat"}});}}
-            if(cyui::ghostButton("Ouvrir en fenêtre séparée"))floatingAssistant=true;
-            cyui::divider();cyui::sectionTitle("Contexte partagé");ImGui::Checkbox("Contexte de QuestDev",&sendContext);ImGui::Checkbox("Derniers logs de la vue",&sendLogs);cyui::textFaint("50 messages maximum dans le contexte.\nLes outils peuvent lire davantage de logs.");
-            if(cyui::button("Inspecter le contexte envoyé"))ImGui::OpenPopup("##contextPreview");
-            if(ImGui::BeginPopup("##contextPreview")){auto text=contextSnapshot().dump(2,' ',false,Json::error_handler_t::replace);ImGui::BeginChild("##contextContent",cyui::dp(700,450),ImGuiChildFlags_Borders);ImGui::TextWrapped("%s",text.c_str());ImGui::EndChild();if(cyui::button("Copier"))ImGui::SetClipboardText(text.c_str());ImGui::EndPopup();}
-            cyui::divider();cyui::sectionTitle("Permissions des outils");const char* policies[]={"Lecture seule","Demander avant action","Autoriser les actions"};cyui::combo("##aiPolicy",&aiPolicy,policies,3,-1);
+            cyui::overline(cyui::tr("ASSISTANT IA").c_str());cyui::space(10);
+            if(cyui::button(cyui::trLabel("New conversation").c_str(),cyui::Variant::secondary,ImVec2(-1,0))){if(assistantReady&&!assistantBusy){assistantBusy=true;assistant->send({{"type","new_chat"}});}}
+            if(cyui::ghostButton(cyui::trLabel("Ouvrir en fenêtre séparée").c_str()))floatingAssistant=true;
+            cyui::divider();cyui::sectionTitle(cyui::tr("Contexte partagé").c_str());ImGui::Checkbox("Contexte de QuestDev",&sendContext);ImGui::Checkbox("Derniers logs de la vue",&sendLogs);cyui::textFaint("50 messages maximum dans le contexte.\nLes outils peuvent lire davantage de logs.");
+            if(cyui::button(cyui::trLabel("Inspecter le contexte envoyé").c_str()))ImGui::OpenPopup("##contextPreview");
+            if(ImGui::BeginPopup("##contextPreview")){auto text=contextSnapshot().dump(2,' ',false,Json::error_handler_t::replace);ImGui::BeginChild("##contextContent",cyui::dp(700,450),ImGuiChildFlags_Borders);ImGui::TextWrapped("%s",text.c_str());ImGui::EndChild();if(cyui::button(cyui::trLabel("Copy").c_str()))ImGui::SetClipboardText(text.c_str());ImGui::EndPopup();}
+            cyui::divider();cyui::sectionTitle(cyui::tr("Permissions des outils").c_str());const char* policies[]={"Lecture seule","Demander avant action","Autoriser les actions"};cyui::combo("##aiPolicy",&aiPolicy,policies,3,-1);
             cyui::space(10);cyui::textFaint("Même politique pour l’assistant\net les clients MCP / SDK.");
-            cyui::divider();if(cyui::button("Configuration MCP"))ImGui::OpenPopup("##mcpConfig");
-            if(ImGui::BeginPopup("##mcpConfig")){cyui::textDim("%s",mcpConfig.empty()?"Démarrez le runtime IA.":mcpConfig.c_str());if(!mcpConfig.empty()){std::ifstream in(widen(mcpConfig));std::ostringstream contents;contents<<in.rdbuf();if(cyui::button("Copier le JSON MCP"))ImGui::SetClipboardText(contents.str().c_str());ImGui::TextWrapped("%s",contents.str().c_str());}ImGui::EndPopup();}
+            cyui::divider();if(cyui::button(cyui::trLabel("Configuration MCP").c_str()))ImGui::OpenPopup("##mcpConfig");
+            if(ImGui::BeginPopup("##mcpConfig")){cyui::textDim("%s",mcpConfig.empty()?"Démarrez le runtime IA.":mcpConfig.c_str());if(!mcpConfig.empty()){std::ifstream in(widen(mcpConfig));std::ostringstream contents;contents<<in.rdbuf();if(cyui::button(cyui::trLabel("Copier le JSON MCP").c_str()))ImGui::SetClipboardText(contents.str().c_str());ImGui::TextWrapped("%s",contents.str().c_str());}ImGui::EndPopup();}
         }
     }
     void deviceActions() {
-        cyui::panelHeader("Device Actions","Captures, développement, performances et contrôles du Quest sélectionné.");cyui::space(10);
+        cyui::panelHeader(cyui::tr("Device Actions").c_str(),cyui::tr("Captures, développement, performances et contrôles du Quest sélectionné.").c_str());cyui::space(10);
         if(!online&&!options.demo)cyui::callout(cyui::Tone::warning,"Sélectionnez un casque autorisé pour utiliser ses actions.");
         auto value=[&](const char* key,const char* fallback="Non lu"){auto it=deviceInfo.find(key);return it==deviceInfo.end()||it->second.empty()?std::string(fallback):it->second;};
         if(cyui::beginCard("##deviceInfo")){
             cyui::heading(value("MODEL",options.demo?"Meta Quest 3 · démonstration":"Quest").c_str(),2);cyui::textDim("Android %s · Batterie %s %% · IP %s",value("OS","?").c_str(),value("BATTERY","?").c_str(),value("IP","USB").c_str());
-            cyui::textFaint("Stockage : %s",value("STORAGE").c_str());ImGui::SameLine();{cyui::ScopedDisabled disabled(!online||options.demo||infoTask!=0);if(cyui::ghostButton("Actualiser l’état"))refreshDevice(true);}
+            cyui::textFaint("Stockage : %s",value("STORAGE").c_str());ImGui::SameLine();{cyui::ScopedDisabled disabled(!online||options.demo||infoTask!=0);if(cyui::ghostButton(cyui::trLabel("Refresh status").c_str()))refreshDevice(true);}
         }cyui::endCard();cyui::space(10);
         const std::map<std::string,const char*> icons={{"##cast",cyui::icon::video},{"##screen",cyui::icon::camera},{"##record",cyui::icon::record},{"##browser",cyui::icon::globe},{"##gpu",cyui::icon::code},{"##perfetto",cyui::icon::clock},{"##hud",cyui::icon::view},{"##metricsRecord",cyui::icon::equalizer},{"##wifi",cyui::icon::connect},{"##prox",cyui::icon::touch},{"##boundary",cyui::icon::crop},{"##power",cyui::icon::power},{"##runtime",cyui::icon::bug}};
         auto card=[&](const char* id,const char* title,const std::function<void()>& draw){if(cyui::beginCard(id)){auto heading=std::string(cyui::iconsAvailable()?icons.at(id):"")+"  "+title;cyui::heading(heading.c_str(),3);cyui::space(8);draw();}cyui::endCard();};
@@ -795,38 +818,38 @@ struct App::Impl {
         auto toggle=[&](const char* id,const char* caption,std::optional<bool> observed,const std::function<void(bool)>& change){bool enabled=observed.value_or(deviceRequests.count(id)?deviceRequests[id]:false);ImGui::PushID(id);{cyui::ScopedDisabled disabled(!online||options.demo||deviceCommandBusy()||infoTask!=0||pluginBusy());if(cyui::toggleSwitch(caption,&enabled)){deviceRequests[id]=enabled;change(enabled);}}if(!observed)cyui::textFaint("%s",deviceRequests.count(id)?(deviceRequests[id]?"Activation demandée · état non vérifié":"Désactivation demandée · état non vérifié"):"État non lu · actualisez pour le vérifier");else cyui::textDim("%s",*observed?"Activé":"Désactivé");ImGui::PopID();};
         if(ImGui::BeginTable("##actionsGrid",3,ImGuiTableFlags_SizingStretchSame)) {
             if(deviceSection==0||deviceSection==1){
-                ImGui::TableNextColumn();card("##cast","MIRRORING VIDÉO / AUDIO",[&]{auto video=videoMirror->state();cyui::textDim("Flux H.264 · fenêtre vidéo native");if(video.active){cyui::textDim("%s",video.status.c_str());if(video.width)cyui::textMono("%d × %d · %d FPS",video.width,video.height,video.fps);{cyui::ScopedDisabled disabled(video.stopping);if(cyui::button("Arrêter et finaliser"))mirrorUi.push_back(videoMirror->stop());}ImGui::SameLine();if(cyui::ghostButton("Voir la vidéo"))videoMirror->focus();}else{cyui::textFaint("Qualité, audio PC, plein écran et MKV.");{cyui::ScopedDisabled disabled(!online||options.demo);if(cyui::button("Démarrer le mirroring…"))mirrorSetup=true;}}if(cyui::ghostButton("Réglages / journal"))mirrorSetup=true;if(!video.error.empty())cyui::textDim("%s",video.error.c_str());});
-                ImGui::TableNextColumn();card("##screen","CAPTURE D’ÉCRAN",[&]{cyui::textDim("PNG du contenu du casque.");{cyui::ScopedDisabled disabled(!online||options.demo);if(cyui::button("Enregistrer une capture…")){auto path=fileDialog(true,L"Image PNG\0*.png\0\0",L"png",L"quest-capture.png");if(!path.empty())submit("Capture d’écran",{{{"exec-out","screencap","-p"},path}},"screenshot",path);}}});
-                ImGui::TableNextColumn();card("##record","ENREGISTREMENT VIDÉO",[&]{ImGui::SetNextItemWidth(cyui::dp(115));ImGui::InputInt("secondes##video",&recordSeconds);recordSeconds=std::clamp(recordSeconds,1,180);{cyui::ScopedDisabled disabled(!online||options.demo||recordTask!=0);if(cyui::button("Enregistrer en MP4…")){auto path=fileDialog(true,L"Vidéo MP4\0*.mp4\0\0",L"mp4",L"quest-recording.mp4");if(!path.empty()){auto job=videoJob(path,recordSeconds);recordTask=submit(job.label,job.steps,"record",path,job.timeoutMs,job.cleanupSteps);}}}if(recordTask){ImGui::SameLine();if(cyui::button("Terminer"))shellAction("Finaliser la vidéo",finishVideoCommand());}});
-                ImGui::TableNextColumn();card("##browser","NAVIGATEUR",[&]{cyui::textField("##browserUrl",browserUrl.data(),int(browserUrl.size()),"https://…",-1);{cyui::ScopedDisabled disabled(!online||options.demo);if(cyui::button("Ouvrir sur le casque")){auto url=trim(browserUrl.data());if(url.rfind("https://",0)==0||url.rfind("http://",0)==0)shellAction("Ouvrir le navigateur","am start -a android.intent.action.VIEW -d "+shellQuote(url));else cyui::notify("Entrez une URL HTTP ou HTTPS.",cyui::Tone::error);}}});
+                ImGui::TableNextColumn();card("##cast","MIRRORING VIDÉO / AUDIO",[&]{auto video=videoMirror->state();cyui::textDim("Flux H.264 · fenêtre vidéo native");if(video.active){cyui::textDim("%s",video.status.c_str());if(video.width)cyui::textMono("%d × %d · %d FPS",video.width,video.height,video.fps);{cyui::ScopedDisabled disabled(video.stopping);if(cyui::button(cyui::trLabel("Arrêter et finaliser").c_str()))mirrorUi.push_back(videoMirror->stop());}ImGui::SameLine();if(cyui::ghostButton(cyui::trLabel("Voir la vidéo").c_str()))videoMirror->focus();}else{cyui::textFaint("Qualité, audio PC, plein écran et MKV.");{cyui::ScopedDisabled disabled(!online||options.demo);if(cyui::button(cyui::trLabel("Démarrer le mirroring…").c_str()))mirrorSetup=true;}}if(cyui::ghostButton(cyui::trLabel("Réglages / journal").c_str()))mirrorSetup=true;if(!video.error.empty())cyui::textDim("%s",video.error.c_str());});
+                ImGui::TableNextColumn();card("##screen","CAPTURE D’ÉCRAN",[&]{cyui::textDim("PNG du contenu du casque.");{cyui::ScopedDisabled disabled(!online||options.demo);if(cyui::button(cyui::trLabel("Enregistrer une capture…").c_str())){auto path=fileDialog(true,L"Image PNG\0*.png\0\0",L"png",L"quest-capture.png");if(!path.empty())submit("Capture d’écran",{{{"exec-out","screencap","-p"},path}},"screenshot",path);}}});
+                ImGui::TableNextColumn();card("##record","ENREGISTREMENT VIDÉO",[&]{ImGui::SetNextItemWidth(cyui::dp(115));ImGui::InputInt("secondes##video",&recordSeconds);recordSeconds=std::clamp(recordSeconds,1,180);{cyui::ScopedDisabled disabled(!online||options.demo||recordTask!=0);if(cyui::button(cyui::trLabel("Enregistrer en MP4…").c_str())){auto path=fileDialog(true,L"Vidéo MP4\0*.mp4\0\0",L"mp4",L"quest-recording.mp4");if(!path.empty()){auto job=videoJob(path,recordSeconds);recordTask=submit(job.label,job.steps,"record",path,job.timeoutMs,job.cleanupSteps);}}}if(recordTask){ImGui::SameLine();if(cyui::button(cyui::trLabel("Terminer").c_str()))shellAction("Finaliser la vidéo",finishVideoCommand());}});
+                ImGui::TableNextColumn();card("##browser","NAVIGATEUR",[&]{cyui::textField("##browserUrl",browserUrl.data(),int(browserUrl.size()),"https://…",-1);{cyui::ScopedDisabled disabled(!online||options.demo);if(cyui::button(cyui::trLabel("Ouvrir sur le casque").c_str())){auto url=trim(browserUrl.data());if(url.rfind("https://",0)==0||url.rfind("http://",0)==0)shellAction("Ouvrir le navigateur","am start -a android.intent.action.VIEW -d "+shellQuote(url));else cyui::notify("Entrez une URL HTTP ou HTTPS.",cyui::Tone::error);}}});
             }
             if(deviceSection==0||deviceSection==2){
                 ImGui::TableNextColumn();card("##gpu","GPU PROFILING",[&]{toggle("gpu","Profiling GPU",flag("GPU"),[&](bool on){shellAction(on?"Activer le profiling GPU":"Désactiver le profiling GPU",std::string("setprop debug.vr.gpuprofilingservice ")+(on?"1":"0"));});cyui::textFaint("Détails et compteurs via ADB.");});
-                ImGui::TableNextColumn();card("##perfetto","TRACE PERFETTO",[&]{ImGui::SetNextItemWidth(cyui::dp(115));ImGui::InputInt("secondes##trace",&traceSeconds);traceSeconds=std::clamp(traceSeconds,1,120);{cyui::ScopedDisabled disabled(!online||options.demo);if(cyui::button("Enregistrer une trace…")){auto path=fileDialog(true,L"Trace Perfetto\0*.perfetto-trace\0\0",L"perfetto-trace",L"quest.perfetto-trace");if(!path.empty()){auto remote="/data/misc/perfetto-traces/questdev-"+std::to_string(GetTickCount64())+".perfetto-trace";submit("Trace Perfetto",{{{"shell","perfetto","-o",remote,"-t",std::to_string(traceSeconds)+"s","-b","32mb","sched","freq","idle","am","wm","gfx","view","binder_driver"},{}},{{"pull",remote,narrow(path)},{}},{{"shell","rm -f "+remote},{}}},"trace",path,(traceSeconds+30)*1000);}}}});
+                ImGui::TableNextColumn();card("##perfetto","TRACE PERFETTO",[&]{ImGui::SetNextItemWidth(cyui::dp(115));ImGui::InputInt("secondes##trace",&traceSeconds);traceSeconds=std::clamp(traceSeconds,1,120);{cyui::ScopedDisabled disabled(!online||options.demo);if(cyui::button(cyui::trLabel("Enregistrer une trace…").c_str())){auto path=fileDialog(true,L"Trace Perfetto\0*.perfetto-trace\0\0",L"perfetto-trace",L"quest.perfetto-trace");if(!path.empty()){auto remote="/data/misc/perfetto-traces/questdev-"+std::to_string(GetTickCount64())+".perfetto-trace";submit("Trace Perfetto",{{{"shell","perfetto","-o",remote,"-t",std::to_string(traceSeconds)+"s","-b","32mb","sched","freq","idle","am","wm","gfx","view","binder_driver"},{}},{{"pull",remote,narrow(path)},{}},{{"shell","rm -f "+remote},{}}},"trace",path,(traceSeconds+30)*1000);}}}});
                 ImGui::TableNextColumn();card("##hud","METRICS HUD",[&]{toggle("hud","Afficher le HUD",ovrFlag("overlay"),[&](bool on){shellAction(on?"Afficher les métriques":"Masquer les métriques",on?metricsCommand("ENABLE_STATS")+"; "+metricsCommand("ENABLE_OVERLAY"):metricsCommand("DISABLE_OVERLAY"));});cyui::textFaint("Nécessite le service OVR Metrics.");});
-                ImGui::TableNextColumn();card("##metricsRecord","METRICS RECORDING",[&]{toggle("csv","Enregistrer en CSV",ovrFlag("csv"),[&](bool on){shellAction(on?"Enregistrer les métriques":"Arrêter les métriques",metricsCommand(on?"ENABLE_CSV":"DISABLE_CSV"));});{cyui::ScopedDisabled disabled(!online||options.demo);if(cyui::iconTextButton(cyui::icon::download,"Récupérer les CSV…")){auto folder=folderDialog();if(!folder.empty()){auto destination=std::filesystem::path(folder)/(L"QuestMetrics-"+std::to_wstring(GetTickCount64()));submit("Récupérer les métriques",{{{"pull","/sdcard/Android/data/com.oculus.ovrmonitormetricsservice/files/CapturedMetrics",narrow(destination.wstring())},{}}},"metrics",destination.wstring());}}}});
+                ImGui::TableNextColumn();card("##metricsRecord","METRICS RECORDING",[&]{toggle("csv","Enregistrer en CSV",ovrFlag("csv"),[&](bool on){shellAction(on?"Enregistrer les métriques":"Arrêter les métriques",metricsCommand(on?"ENABLE_CSV":"DISABLE_CSV"));});{cyui::ScopedDisabled disabled(!online||options.demo);if(cyui::iconTextButton(cyui::icon::download,cyui::trLabel("Récupérer les CSV…").c_str())){auto folder=folderDialog();if(!folder.empty()){auto destination=std::filesystem::path(folder)/(L"QuestMetrics-"+std::to_wstring(GetTickCount64()));submit("Récupérer les métriques",{{{"pull","/sdcard/Android/data/com.oculus.ovrmonitormetricsservice/files/CapturedMetrics",narrow(destination.wstring())},{}}},"metrics",destination.wstring());}}}});
             }
             if(deviceSection==0||deviceSection==3){
-                ImGui::TableNextColumn();card("##wifi","ADB OVER WI-FI",[&]{auto port=value("WIFI","");std::optional<bool> wifi;if(port=="-1"||port=="0")wifi=false;else if(!port.empty()&&std::all_of(port.begin(),port.end(),[](char c){return c>='0'&&c<='9';}))wifi=true;toggle("wifi","ADB sur Wi-Fi",wifi,[&](bool on){if(on)submit("ADB Wi-Fi 5555",{{{"tcpip","5555"},{}}},"device:control");else submit("ADB USB",{{{"usb"},{}}},"device:control");});cyui::textField("##deviceNetwork",network.data(),int(network.size()),"IP:5555",-1);{cyui::ScopedDisabled disabled(options.demo);if(cyui::button("Connecter en Wi-Fi"))backend->action("connect",network.data());}});
+                ImGui::TableNextColumn();card("##wifi","ADB OVER WI-FI",[&]{auto port=value("WIFI","");std::optional<bool> wifi;if(port=="-1"||port=="0")wifi=false;else if(!port.empty()&&std::all_of(port.begin(),port.end(),[](char c){return c>='0'&&c<='9';}))wifi=true;toggle("wifi","ADB sur Wi-Fi",wifi,[&](bool on){if(on)submit("ADB Wi-Fi 5555",{{{"tcpip","5555"},{}}},"device:control");else submit("ADB USB",{{{"usb"},{}}},"device:control");});cyui::textField("##deviceNetwork",network.data(),int(network.size()),"IP:5555",-1);{cyui::ScopedDisabled disabled(options.demo);if(cyui::button(cyui::trLabel("Connecter en Wi-Fi").c_str()))backend->action("connect",network.data());}});
                 ImGui::TableNextColumn();card("##prox","CAPTEUR DE PROXIMITÉ",[&]{auto raw=value("PROX","");std::optional<bool> state;if(raw.find("DISABLED")!=std::string::npos)state=false;else if(raw.find("ENABLED")!=std::string::npos)state=true;toggle("prox","Capteur de proximité",state,[&](bool on){shellAction(on?"Activer le capteur de proximité":"Désactiver le capteur de proximité",on?"am broadcast --user 0 -a com.oculus.vrpowermanager.automation_disable":"am broadcast --user 0 -a com.oculus.vrpowermanager.prox_close --ei duration 3600000");});});
                 ImGui::TableNextColumn();card("##boundary","BOUNDARY / GUARDIAN",[&]{toggle("boundary","Boundary",flag("GUARDIAN",true),[&](bool on){shellAction(on?"Activer Boundary":"Désactiver Boundary pour le développement",on?"setprop debug.oculus.guardian_pause 0; am broadcast -a com.oculus.intent.action.GUARDIAN_STATE_CHANGED --ez guardian_enabled true":"setprop debug.oculus.guardian_pause 1; am broadcast -a com.oculus.intent.action.GUARDIAN_STATE_CHANGED --ez guardian_enabled false",!on);});});
-                ImGui::TableNextColumn();card("##power","ALIMENTATION",[&]{{cyui::ScopedDisabled disabled(!online||options.demo);if(cyui::button("Réveiller"))shellAction("Réveiller le casque","input keyevent 224");ImGui::SameLine();if(cyui::button("Veille"))shellAction("Mettre en veille","input keyevent 223");if(cyui::button("Redémarrer…")){confirmationText="Redémarrer le casque";confirmationJob={"Redémarrage",{{{"reboot"},{}}},30000,true};confirmDevice=true;}}});
-                ImGui::TableNextColumn();card("##runtime","VR RUNTIME DEBUG",[&]{{cyui::ScopedDisabled disabled(!online||options.demo);if(cyui::button("Lister les propriétés VR")){terminalMode=0;strncpy_s(command.data(),command.size(),"getprop | grep -E 'debug.oculus|debug.vr'",_TRUNCATE);page=4;executeTerminal();}if(cyui::button("Compteurs GPU disponibles")){terminalMode=0;strncpy_s(command.data(),command.size(),"ovrgpuprofiler -m",_TRUNCATE);page=4;executeTerminal();}}});
+                ImGui::TableNextColumn();card("##power","ALIMENTATION",[&]{{cyui::ScopedDisabled disabled(!online||options.demo);if(cyui::button(cyui::trLabel("Réveiller").c_str()))shellAction("Réveiller le casque","input keyevent 224");ImGui::SameLine();if(cyui::button(cyui::trLabel("Veille").c_str()))shellAction("Mettre en veille","input keyevent 223");if(cyui::button(cyui::trLabel("Redémarrer…").c_str())){confirmationText="Redémarrer le casque";confirmationJob={"Redémarrage",{{{"reboot"},{}}},30000,true};confirmDevice=true;}}});
+                ImGui::TableNextColumn();card("##runtime","VR RUNTIME DEBUG",[&]{{cyui::ScopedDisabled disabled(!online||options.demo);if(cyui::button(cyui::trLabel("Lister les propriétés VR").c_str())){terminalMode=0;strncpy_s(command.data(),command.size(),"getprop | grep -E 'debug.oculus|debug.vr'",_TRUNCATE);page=4;executeTerminal();}if(cyui::button(cyui::trLabel("Compteurs GPU disponibles").c_str())){terminalMode=0;strncpy_s(command.data(),command.size(),"ovrgpuprofiler -m",_TRUNCATE);page=4;executeTerminal();}}});
             }
             ImGui::EndTable();
         }
         cyui::space(10);
-        if(preview->texture()) {cyui::sectionTitle("DERNIÈRE CAPTURE");auto size=ImGui::GetContentRegionAvail();float width=std::min(size.x,cyui::dp(1000));float height=width*float(preview->height())/float(preview->width());ImGui::Image(static_cast<ImTextureID>(preview->texture()),ImVec2(width,height));}
+        if(preview->texture()) {cyui::sectionTitle(cyui::tr("Latest screenshot").c_str());cyui::ImageData image{static_cast<ImTextureID>(preview->texture()),preview->width(),preview->height()};cyui::imageViewport("##screenshotViewport",screenshotView,image,ImVec2(-1,cyui::dp(380)));cyui::textFaint(cyui::tr("Wheel: zoom · middle drag: pan · double click: fit").c_str());}
     }
     void terminal() {
-        cyui::panelHeader("Commandes ADB","Exécution sur le casque sélectionné, sortie en direct et annulation par tâche.");cyui::space(10);
+        cyui::panelHeader(cyui::tr("Commandes ADB").c_str(),cyui::tr("Exécution sur le casque sélectionné, sortie en direct et annulation par tâche.").c_str());cyui::space(10);
         const char* modes[]={"Shell Android","Commande ADB"};cyui::segmented("##terminalMode",modes,2,&terminalMode,cyui::dp(320));ImGui::SameLine();ImGui::SetNextItemWidth(cyui::dp(100));ImGui::InputInt("Délai (s)",&terminalTimeout);terminalTimeout=std::clamp(terminalTimeout,1,300);
         ImGui::SetNextItemWidth(-1);bool enter=ImGui::InputTextWithHint("##command",terminalMode?"adb shell getprop / pull / push / forward…":"getprop ro.product.model",command.data(),command.size(),ImGuiInputTextFlags_EnterReturnsTrue);
-        {cyui::ScopedDisabled disabled(!online||options.demo);if(cyui::primaryButton("Exécuter")||enter)executeTerminal();}
-        ImGui::SameLine();if(cyui::button("Copier la sortie")&&tasks.count(selectedTask))ImGui::SetClipboardText(tasks[selectedTask].output.c_str());
-        ImGui::SameLine();if(cyui::button("Exporter…")&&tasks.count(selectedTask)){auto path=fileDialog(true,L"Texte\0*.txt\0\0",L"txt",L"adb-output.txt");if(!path.empty()){std::ofstream out(path,std::ios::binary);out<<tasks[selectedTask].output;}}
-        if(tasks.count(selectedTask)){auto& t=tasks[selectedTask];if(!t.done){ImGui::SameLine();if(cyui::button("Annuler"))backend->cancel(t.id);}cyui::space(8);cyui::textDim("%s",t.label.c_str());cyui::badge(t.done?(t.ok?"TERMINÉ":"ÉCHEC / ANNULÉ"):"EN COURS",t.done?(t.ok?cyui::Tone::success:cyui::Tone::error):cyui::Tone::info);ImGui::BeginChild("##terminalOutput",ImVec2(0,0),ImGuiChildFlags_Borders,ImGuiWindowFlags_HorizontalScrollbar);{cyui::ScopedFont font(cyui::monoFont());ImGui::InputTextMultiline("##output",t.output.data(),t.output.size()+1,ImVec2(-1,-1),ImGuiInputTextFlags_ReadOnly);}ImGui::EndChild();}
-        else cyui::emptyState("Terminal prêt","Choisissez une commande rapide ou saisissez votre commande. Entrée pour exécuter.",cyui::icon::code);
+        {cyui::ScopedDisabled disabled(!online||options.demo);if(cyui::primaryButton(cyui::trLabel("Run").c_str())||enter)executeTerminal();}
+        ImGui::SameLine();if(cyui::button(cyui::trLabel("Copy output").c_str())&&tasks.count(selectedTask))ImGui::SetClipboardText(tasks[selectedTask].output.c_str());
+        ImGui::SameLine();if(cyui::button(cyui::trLabel("Export…").c_str())&&tasks.count(selectedTask)){auto path=fileDialog(true,L"Texte\0*.txt\0\0",L"txt",L"adb-output.txt");if(!path.empty()){std::ofstream out(path,std::ios::binary);out<<tasks[selectedTask].output;}}
+        if(tasks.count(selectedTask)){auto& t=tasks[selectedTask];if(!t.done){ImGui::SameLine();if(cyui::button(cyui::trLabel("Cancel").c_str()))backend->cancel(t.id);}cyui::space(8);cyui::textDim("%s",t.label.c_str());cyui::badge(t.done?(t.ok?"TERMINÉ":"ÉCHEC / ANNULÉ"):"EN COURS",t.done?(t.ok?cyui::Tone::success:cyui::Tone::error):cyui::Tone::info);t.viewer.draw("##terminalOutput",t.output,ImVec2(-1,-1),t.follow);}
+        else cyui::emptyState(cyui::tr("Terminal ready").c_str(),cyui::tr("Choisissez une commande rapide ou saisissez votre commande. Entrée pour exécuter.").c_str(),cyui::icon::code);
     }
     void metricSelections(const Plugin& p,PluginPanel& panel){
         auto& draft=panel.draft;const bool companion=p.controller=="cyinsight_ovr";
@@ -848,20 +871,20 @@ struct App::Impl {
     void configurablePluginPage(const Plugin& p,bool installed){
         auto& panel=pluginPanels[p.id];auto& draft=panel.draft;const bool companion=p.controller=="cyinsight_ovr";const bool disabled=!online||options.demo||!installed||!p.enabled||pluginBusy();
         auto run=[&](const std::string& action,bool settings=false){try{runPlugin(p,action,settings?draft:Json::object());}catch(const std::exception& e){panel.error=e.what();}};
-        {cyui::ScopedDisabled scope(disabled);if(cyui::primaryButton("Appliquer au Quest"))run("apply",true);ImGui::SameLine();if(cyui::button("Lire l’état"))run("read_state");ImGui::SameLine();if(cyui::button(companion?"Arrêter / restaurer":"Masquer le HUD"))run("hide");}
-        ImGui::SameLine();if(cyui::button("Enregistrer le profil"))savePluginProfile(p);
+        {cyui::ScopedDisabled scope(disabled);if(cyui::primaryButton(cyui::trLabel("Appliquer au Quest").c_str()))run("apply",true);ImGui::SameLine();if(cyui::button(cyui::trLabel("Lire l’état").c_str()))run("read_state");ImGui::SameLine();if(cyui::button(companion?"Arrêter / restaurer":"Masquer le HUD"))run("hide");}
+        ImGui::SameLine();if(cyui::button(cyui::trLabel("Enregistrer le profil").c_str()))savePluginProfile(p);
         cyui::space(6);cyui::textFaint("Les réglages ci-dessous sont un profil local. Appliquer les envoie au casque sélectionné.");
-        if(panel.task){cyui::progressBar(-1,ImVec2(-cyui::dp(185),cyui::dp(4)));ImGui::SameLine();if(cyui::ghostButton("Annuler"))backend->cancel(panel.task);ImGui::SameLine();if(cyui::ghostButton("Sortie ADB")){selectedTask=panel.task;page=4;}}
+        if(panel.task){cyui::progressBar(-1,ImVec2(-cyui::dp(185),cyui::dp(4)));ImGui::SameLine();if(cyui::ghostButton(cyui::trLabel("Cancel").c_str()))backend->cancel(panel.task);ImGui::SameLine();if(cyui::ghostButton(cyui::trLabel("Sortie ADB").c_str())){selectedTask=panel.task;page=4;}}
         if(!panel.error.empty())cyui::callout(cyui::Tone::error,panel.error.c_str());else if(!panel.message.empty())cyui::callout(cyui::Tone::info,panel.message.c_str());
         if(!installed)cyui::callout(cyui::Tone::warning,companion?"Installez l’APK CyInsightOVR puis initialisez son collecteur dans Connexion / captures.":"Installez OVR Metrics Tool sur le Quest pour appliquer ces réglages.");
         if(ImGui::BeginTabBar("##pluginTabs")){
             if(ImGui::BeginTabItem("HUD et métriques",nullptr,pluginTabRequest&&options.pluginTab==0?ImGuiTabItemFlags_SetSelected:0)){
-                cyui::space(8);bool columns=ImGui::GetContentRegionAvail().x>cyui::dp(850)&&ImGui::BeginTable("##hudColumns",2,ImGuiTableFlags_SizingStretchProp);if(columns){ImGui::TableSetupColumn("Placement",ImGuiTableColumnFlags_WidthStretch,.4f);ImGui::TableSetupColumn("Métriques",ImGuiTableColumnFlags_WidthStretch,.6f);ImGui::TableNextRow();ImGui::TableNextColumn();}
-                if(cyui::beginCard("##hudPlacement","AFFICHAGE DU HUD",columns?cyui::dp(405):0)){
-                    if(cyui::beginProperties("##hudSettings",cyui::dp(145))){
+                cyui::space(8);bool columns=ImGui::GetContentRegionAvail().x>cyui::dp(850)&&ImGui::BeginTable("##hudColumns",2,ImGuiTableFlags_SizingStretchProp);if(columns){ImGui::TableSetupColumn("Placement",ImGuiTableColumnFlags_WidthStretch,.4f);ImGui::TableSetupColumn(cyui::trLabel("Metrics").c_str(),ImGuiTableColumnFlags_WidthStretch,.6f);ImGui::TableNextRow();ImGui::TableNextColumn();}
+                if(cyui::beginCard("##hudPlacement",cyui::tr("AFFICHAGE DU HUD").c_str(),columns?cyui::dp(405):0)){
+                    if(cyui::beginProperties("##hudSettings",145)){
                         if(companion){
-                            cyui::property("Taille");const char* sizes[]={"Compact","Moyen"};int size=draft["size"]=="medium"?1:0;if(cyui::combo("##hudSize",&size,sizes,2))draft["size"]=size?"medium":"small";
-                            cyui::property("Position");const char* labels[]={"Haut gauche","Haut centre","Haut droite","Centre gauche","Centre","Centre droite","Bas gauche","Bas centre","Bas droite"};const char* values[]={"upper_left","upper_center","upper_right","center_left","center","center_right","lower_left","lower_center","lower_right"};int index=0;for(int i=0;i<9;++i)if(draft["corner"]==values[i])index=i;if(cyui::combo("##hudCorner",&index,labels,9))draft["corner"]=values[index];
+                            cyui::property(cyui::tr("Taille").c_str());const char* sizes[]={"Compact","Moyen"};int size=draft["size"]=="medium"?1:0;if(cyui::combo("##hudSize",&size,sizes,2))draft["size"]=size?"medium":"small";
+                            cyui::property(cyui::tr("Position").c_str());const char* labels[]={"Haut gauche","Haut centre","Haut droite","Centre gauche","Centre","Centre droite","Bas gauche","Bas centre","Bas droite"};const char* values[]={"upper_left","upper_center","upper_right","center_left","center","center_right","lower_left","lower_center","lower_right"};int index=0;for(int i=0;i<9;++i)if(draft["corner"]==values[i])index=i;if(cyui::combo("##hudCorner",&index,labels,9))draft["corner"]=values[index];
                         }else{
                             for(const auto& pair:std::vector<std::pair<const char*,const char*>>{{"overlay","Afficher le HUD"},{"headlocked","Suivre la tête"},{"graphsVisible","Afficher les graphes"},{"statsVisible","Afficher les valeurs"},{"csv","Enregistrer en CSV"}}){cyui::property(pair.second);bool value=draft[pair.first].get<bool>();if(cyui::toggleSwitch((std::string("##")+pair.first).c_str(),&value))draft[pair.first]=value;}
                             auto number=[&](const char* label,const char* key,float low,float high,const char* format){cyui::property(label);float value=draft[key].get<float>();if(cyui::sliderBar(key,&value,low,high,format,-1))draft[key]=value;};
@@ -870,8 +893,8 @@ struct App::Impl {
                     }
                     cyui::space(10);cyui::textFaint("%s",companion?"Moteur de rendu Meta · suivi de la tête":"Profil de configuration OVR Metrics");
                 }cyui::endCard();if(columns)ImGui::TableNextColumn();else cyui::space(8);
-                if(cyui::beginCard("##hudMetrics","GRAPHIQUES ET VALEURS",columns?cyui::dp(405):0)){
-                    if(companion){{cyui::ScopedDisabled scope(disabled);if(cyui::button("Lire le catalogue du casque"))run("catalog");}cyui::textFaint("Le HUD utilise le moteur Meta ; l’arrêt restaure les réglages précédents.");}
+                if(cyui::beginCard("##hudMetrics",cyui::tr("GRAPHIQUES ET VALEURS").c_str(),columns?cyui::dp(405):0)){
+                    if(companion){{cyui::ScopedDisabled scope(disabled);if(cyui::button(cyui::trLabel("Lire le catalogue du casque").c_str()))run("catalog");}cyui::textFaint("Le HUD utilise le moteur Meta ; l’arrêt restaure les réglages précédents.");}
                     metricSelections(p,panel);
                 }cyui::endCard();if(columns)ImGui::EndTable();
                 if(!companion)cyui::textFaint("Appliquer gère les 30 métriques de ce panneau. Les autres métriques sont conservées.");
@@ -880,27 +903,27 @@ struct App::Impl {
             if(ImGui::BeginTabItem(companion?"Connexion / captures":"Rapports CSV",nullptr,pluginTabRequest&&options.pluginTab==1?ImGuiTabItemFlags_SetSelected:0)){
                 cyui::space(10);
                 if(companion){
-                    if(cyui::beginCard("##companionConnection","COLLECTEUR CYINSIGHTOVR")){
+                    if(cyui::beginCard("##companionConnection",cyui::tr("COLLECTEUR CYINSIGHTOVR").c_str())){
                         ImGui::TextWrapped("Le collecteur officiel s’exécute sur le Quest jusqu’au redémarrage. Choisissez cyinsightovr-bridge.jar dans le dossier de distribution de CyInsightOVR.");
-                        {cyui::ScopedDisabled scope(disabled);if(cyui::button("Initialiser le collecteur…")){auto jar=fileDialog(false,L"Collecteur CyInsightOVR (*.jar)\0*.jar\0\0",L"jar");if(!jar.empty()){try{auto job=cyInsightBootstrap(jar);auto id=submit(job.label,job.steps,"plugin:control",{},job.timeoutMs,job.cleanupSteps);pluginRuns[id]={p,"bootstrap",Json::object()};panel.task=id;panel.error.clear();}catch(const std::exception& e){panel.error=e.what();}}}ImGui::SameLine();if(cyui::button("État du profileur"))run("status");}
+                        {cyui::ScopedDisabled scope(disabled);if(cyui::button(cyui::trLabel("Initialiser le collecteur…").c_str())){auto jar=fileDialog(false,L"Collecteur CyInsightOVR (*.jar)\0*.jar\0\0",L"jar");if(!jar.empty()){try{auto job=cyInsightBootstrap(jar);auto id=submit(job.label,job.steps,"plugin:control",{},job.timeoutMs,job.cleanupSteps);pluginRuns[id]={p,"bootstrap",Json::object()};panel.task=id;panel.error.clear();}catch(const std::exception& e){panel.error=e.what();}}}ImGui::SameLine();if(cyui::button(cyui::trLabel("État du profileur").c_str()))run("status");}
                         cyui::textFaint("Un collecteur déjà actif est conservé. Après une mise à jour, utilisez -RestartBridge du lanceur CyInsightOVR.");
                     }cyui::endCard();cyui::space(8);
-                    if(cyui::beginCard("##companionCapture","CAPTURE DES TUILES GPU")){
-                        if(cyui::beginProperties("##captureSettings",cyui::dp(180))){
-                            cyui::property("Application cible");auto target=draft["package"].get<std::string>();if(ImGui::BeginCombo("##captureTarget",target.empty()?"Choisir un package exact":target.c_str())){for(const auto& pkg:packages)if(pkg.name!=p.package){if(ImGui::Selectable(pkg.name.c_str(),target==pkg.name))draft["package"]=pkg.name;}ImGui::EndCombo();}
-                            cyui::property("Durée");float seconds=draft["seconds"].get<float>();if(cyui::sliderBar("##captureSeconds",&seconds,.05f,2,"%.2f s",-1))draft["seconds"]=seconds;cyui::endProperties();
+                    if(cyui::beginCard("##companionCapture",cyui::tr("CAPTURE DES TUILES GPU").c_str())){
+                        if(cyui::beginProperties("##captureSettings",180)){
+                            cyui::property(cyui::tr("Application cible").c_str());auto target=draft["package"].get<std::string>();if(ImGui::BeginCombo("##captureTarget",target.empty()?"Choisir un package exact":target.c_str())){for(const auto& pkg:packages)if(pkg.name!=p.package){if(ImGui::Selectable(pkg.name.c_str(),target==pkg.name))draft["package"]=pkg.name;}ImGui::EndCombo();}
+                            cyui::property(cyui::tr("Durée").c_str());float seconds=draft["seconds"].get<float>();if(cyui::sliderBar("##captureSeconds",&seconds,.05f,2,"%.2f s",-1))draft["seconds"]=seconds;cyui::endProperties();
                         }
-                        {cyui::ScopedDisabled scope(disabled);if(cyui::button("Activer le profilage détaillé"))run("enable_details",true);ImGui::SameLine();if(cyui::button("Capturer les tuiles GPU"))run("capture",true);}
+                        {cyui::ScopedDisabled scope(disabled);if(cyui::button(cyui::trLabel("Activer le profilage détaillé").c_str()))run("enable_details",true);ImGui::SameLine();if(cyui::button(cyui::trLabel("Capturer les tuiles GPU").c_str()))run("capture",true);}
                         ImGui::TextWrapped("Activez le profilage avant de démarrer le jeu, puis ouvrez-le manuellement. La capture ne lance ni ne redémarre le jeu. Actualisez l’état jusqu’à retrouver l’identifiant de capture demandé.");
                     }cyui::endCard();
                 }else{
                     ImGui::TextWrapped("Les rapports CSV sont produits par OVR Metrics Tool dans le dossier CapturedMetrics du casque.");
-                    if(cyui::primaryButton("Courbes et enregistrement sur PC")){page=8;if(online&&!options.demo)metrics->capture().request("refresh_reports");}
-                    {cyui::ScopedDisabled scope(disabled);if(cyui::button("Démarrer le CSV"))run("csv_start");ImGui::SameLine();if(cyui::button("Arrêter le CSV"))run("csv_stop");}
+                    if(cyui::primaryButton(cyui::trLabel("Courbes et enregistrement sur PC").c_str())){page=8;if(online&&!options.demo)metrics->capture().request("refresh_reports");}
+                    {cyui::ScopedDisabled scope(disabled);if(cyui::button(cyui::trLabel("Démarrer le CSV").c_str()))run("csv_start");ImGui::SameLine();if(cyui::button(cyui::trLabel("Arrêter le CSV").c_str()))run("csv_stop");}
                 }
                 cyui::space(12);{cyui::ScopedDisabled scope(!online&&!options.demo);if(cyui::button(companion?"Parcourir les captures .cyovr":"Parcourir les rapports CSV")){files->browse(companion?"/sdcard/Android/data/org.cyinsights.ovr/files/Captures":"/sdcard/Android/data/com.oculus.ovrmonitormetricsservice/files/CapturedMetrics");page=7;}}
                 if(companion){
-                    cyui::space(8);{cyui::ScopedDisabled scope(panel.capture.empty());if(cyui::button("Exporter la capture reçue…")){auto path=fileDialog(true,L"Capture CyInsightOVR (*.cyovr)\0*.cyovr\0\0",L"cyovr",L"capture.cyovr");if(!path.empty()){std::ofstream output(path,std::ios::binary);output<<panel.capture.dump();output.close();cyui::notify(output?"Capture exportée.":"Export impossible.",output?cyui::Tone::success:cyui::Tone::error);}}}
+                    cyui::space(8);{cyui::ScopedDisabled scope(panel.capture.empty());if(cyui::button(cyui::trLabel("Exporter la capture reçue…").c_str())){auto path=fileDialog(true,L"Capture CyInsightOVR (*.cyovr)\0*.cyovr\0\0",L"cyovr",L"capture.cyovr");if(!path.empty()){std::ofstream output(path,std::ios::binary);output<<panel.capture.dump();output.close();cyui::notify(output?"Capture exportée.":"Export impossible.",output?cyui::Tone::success:cyui::Tone::error);}}}
                     if(!panel.requestedCapture.empty())cyui::textMono("Demandée : %s",panel.requestedCapture.c_str());
                     if(!panel.capture.empty())cyui::textMono("Reçue : %s · %s",panel.capture.value("capture_id",std::string()).c_str(),panel.capture.value("status",std::string()).c_str());
                     cyui::textFaint("Lire l’état récupère le résultat du collecteur. L’export .cyovr s’ouvre dans CyInsights sur PC.");
@@ -909,70 +932,73 @@ struct App::Impl {
             }
             if(ImGui::BeginTabItem("État du service",nullptr,pluginTabRequest&&options.pluginTab==2?ImGuiTabItemFlags_SetSelected:0)){
                 cyui::space(10);cyui::textDim("Dernière réponse du casque sélectionné");cyui::textFaint("La validation des réglages ne confirme pas leur visibilité physique dans le casque.");
-                if(panel.observed.empty())cyui::emptyState("État pas encore lu","Utilisez Lire l’état pour interroger le service du Quest.",cyui::icon::info);
+                if(panel.observed.empty())cyui::emptyState(cyui::tr("État pas encore lu").c_str(),cyui::tr("Utilisez Lire l’état pour interroger le service du Quest.").c_str(),cyui::icon::info);
                 else{
-                    if(!companion&&panel.observed.contains("configuration")){if(cyui::button("Copier l’état dans le profil")){try{panel.draft=validatePluginSettings(p,panel.observed.at("configuration"));}catch(const std::exception& e){panel.error=e.what();}}}
-                    auto text=panel.observed.dump(2);ImGui::InputTextMultiline("##pluginState",text.data(),text.size()+1,ImVec2(-1,cyui::dp(380)),ImGuiInputTextFlags_ReadOnly);
+                    if(!companion&&panel.observed.contains("configuration")){if(cyui::button(cyui::trLabel("Copier l’état dans le profil").c_str())){try{panel.draft=validatePluginSettings(p,panel.observed.at("configuration"));}catch(const std::exception& e){panel.error=e.what();}}}
+                    auto text=panel.observed.dump(2);panel.viewer.draw("##pluginState",text,ImVec2(-1,cyui::dp(380)),panel.follow,false,1);
                 }ImGui::EndTabItem();
             }ImGui::EndTabBar();pluginTabRequest=false;
         }
-        cyui::space(8);{cyui::ScopedDisabled scope(!online||options.demo||pluginBusy());if(cyui::ghostButton("Installer un APK…"))install();}ImGui::SameLine();if(cyui::ghostButton("Ouvrir ses logs")){openApp(p.package);page=0;}
+        cyui::space(8);{cyui::ScopedDisabled scope(!online||options.demo||pluginBusy());if(cyui::ghostButton(cyui::trLabel("Installer un APK…").c_str()))install();}ImGui::SameLine();if(cyui::ghostButton(cyui::trLabel("Ouvrir ses logs").c_str())){openApp(p.package);page=0;}
     }
     void pluginPage() {
-        if(plugins.empty()){cyui::emptyState("Aucun plugin","Créez un plugin ou ajoutez un fichier .cyplugin dans le dossier des plugins.",cyui::icon::library);return;}
+        if(plugins.empty()){cyui::emptyState(cyui::tr("Aucun plugin").c_str(),cyui::tr("Créez un plugin ou ajoutez un fichier .cyplugin dans le dossier des plugins.").c_str(),cyui::icon::library);return;}
         auto& p=plugins[size_t(std::clamp(selectedPlugin,0,int(plugins.size())-1))];
         auto installed=std::any_of(packages.begin(),packages.end(),[&](const Package& a){return a.name==p.package;});
         if(configurablePlugin(p)&&p.error.empty()){
             cyui::panelHeader(p.name.c_str(),p.description.c_str());cyui::space(8);ImGui::Checkbox("Plugin activé",&p.enabled);ImGui::SameLine();cyui::badge(installed?"APP DÉTECTÉE":"APP ABSENTE",installed?cyui::Tone::success:cyui::Tone::warning);ImGui::SameLine();cyui::textMono("%s",p.package.c_str());cyui::space(8);configurablePluginPage(p,installed);return;
         }
-        cyui::panelHeader("Plugins et applications liées","Extensions rechargeables, actions ADB et ponts TCP vers les services de vos apps Quest.");cyui::space(10);
+        cyui::panelHeader(cyui::tr("Plugins et applications liées").c_str(),cyui::tr("Extensions rechargeables, actions ADB et ponts TCP vers les services de vos apps Quest.").c_str());cyui::space(10);
         cyui::heading(p.name.c_str(),1);cyui::textDim("%s · %s",p.id.c_str(),p.version.c_str());ImGui::TextWrapped("%s",p.description.c_str());cyui::space(12);
         if(!p.error.empty()){cyui::callout(cyui::Tone::error,p.error.c_str());return;}
         ImGui::Checkbox("Plugin activé",&p.enabled);cyui::badge(installed?"APP DÉTECTÉE":"APP ABSENTE",installed?cyui::Tone::success:cyui::Tone::warning);ImGui::SameLine();cyui::textMono("%s",p.package.c_str());
-        cyui::space(8);if(cyui::beginCard("##pluginBridge","LIAISON AVEC LE CASQUE")) {
-            if(p.localPort&&p.remotePort){cyui::textMono("%s · localhost:%d ↔ Quest:%d",p.reverse?"ADB reverse":"ADB forward",p.localPort,p.remotePort);cyui::textDim("%s",pluginLinked[p.id]?"Tunnel ADB actif":"Tunnel non établi dans cette session");cyui::textFaint("L’application cible doit fournir le service TCP correspondant.");{cyui::ScopedDisabled disabled(!online||options.demo||!p.enabled||!installed);if(cyui::button("Relier l’application")){auto request=pluginLink(p);submit(request.label,request.steps,"link:"+p.id);}ImGui::SameLine();if(cyui::button("Déconnecter")){auto request=pluginLink(p,true);submit(request.label,request.steps,"unlink:"+p.id);}}}
+        cyui::space(8);if(cyui::beginCard("##pluginBridge",cyui::tr("LIAISON AVEC LE CASQUE").c_str())) {
+            if(p.localPort&&p.remotePort){cyui::textMono("%s · localhost:%d ↔ Quest:%d",p.reverse?"ADB reverse":"ADB forward",p.localPort,p.remotePort);cyui::textDim("%s",pluginLinked[p.id]?"Tunnel ADB actif":"Tunnel non établi dans cette session");cyui::textFaint("L’application cible doit fournir le service TCP correspondant.");{cyui::ScopedDisabled disabled(!online||options.demo||!p.enabled||!installed);if(cyui::button(cyui::trLabel("Relier l’application").c_str())){auto request=pluginLink(p);submit(request.label,request.steps,"link:"+p.id);}ImGui::SameLine();if(cyui::button(cyui::trLabel("Déconnecter").c_str())){auto request=pluginLink(p,true);submit(request.label,request.steps,"unlink:"+p.id);}}}
             else cyui::textDim("Ce plugin déclare des actions sans service TCP.");
-            {cyui::ScopedDisabled disabled(!online||options.demo||!installed||!p.enabled);if(cyui::button("Lancer l’app"))backend->action("launch",p.package);}ImGui::SameLine();if(cyui::button("Ouvrir ses logs")){openApp(p.package);page=0;}
+            {cyui::ScopedDisabled disabled(!online||options.demo||!installed||!p.enabled);if(cyui::button(cyui::trLabel("Lancer l’app").c_str()))backend->action("launch",p.package);}ImGui::SameLine();if(cyui::button(cyui::trLabel("Ouvrir ses logs").c_str())){openApp(p.package);page=0;}
         }cyui::endCard();cyui::space(10);
-        if(cyui::beginCard("##pluginActions","ACTIONS DU PLUGIN")){for(const auto& a:p.actions){ImGui::PushID(a.id.c_str());{cyui::ScopedDisabled disabled(!online||options.demo||!p.enabled||!installed);if(cyui::button(a.label.c_str())){auto request=pluginAction(p,a);submit(request.label,request.steps,"plugin",{},request.timeoutMs);}}cyui::tooltip(a.command.c_str());ImGui::PopID();}}cyui::endCard();cyui::space(10);cyui::textFaint("Manifest : %s",narrow(p.path.wstring()).c_str());
+        if(cyui::beginCard("##pluginActions",cyui::tr("ACTIONS DU PLUGIN").c_str())){for(const auto& a:p.actions){ImGui::PushID(a.id.c_str());{cyui::ScopedDisabled disabled(!online||options.demo||!p.enabled||!installed);if(cyui::button(a.label.c_str())){auto request=pluginAction(p,a);submit(request.label,request.steps,"plugin",{},request.timeoutMs);}}cyui::tooltip(a.command.c_str());ImGui::PopID();}}cyui::endCard();cyui::space(10);cyui::textFaint("Manifest : %s",narrow(p.path.wstring()).c_str());
     }
     void filesPage() { files->draw(); }
-    void assistantPage() {
-        cyui::panelHeader("Discussion IA","Assistant contextualisé et outils QuestDev via CyToolsCore.");cyui::space(8);
+    void assistantPage(bool floating=false) {
+        cyui::panelHeader(cyui::tr("AI discussion").c_str(),cyui::tr("Context-aware assistant and QuestDev tools through CyToolsCore.").c_str());cyui::space(8);
         cyui::badge(assistantReady?"MCP / SDK ACTIF":options.demo?"DÉMONSTRATION":"RUNTIME HORS LIGNE",assistantReady?cyui::Tone::success:cyui::Tone::neutral);ImGui::SameLine();cyui::textDim("%s",assistantStatus.c_str());
         if(!assistantReady){
-            {cyui::ScopedDisabled disabled(options.demo||assistant->running());if(cyui::primaryButton("Démarrer MCP / SDK"))startAssistant();}
-            auto script=productRoot()/L"runtime/setup.ps1";if(isFile(script.wstring())){ImGui::SameLine();if(cyui::button("Installer / réparer le runtime")){auto args=L"-NoProfile -ExecutionPolicy Bypass -File \""+script.wstring()+L"\"";ShellExecuteW(nullptr,L"open",L"powershell.exe",args.c_str(),productRoot().c_str(),SW_SHOWNORMAL);}}
+            {cyui::ScopedDisabled disabled(options.demo||assistant->running());if(cyui::primaryButton(cyui::trLabel("Démarrer MCP / SDK").c_str()))startAssistant();}
+            auto script=productRoot()/L"runtime/setup.ps1";if(isFile(script.wstring())){ImGui::SameLine();if(cyui::button(cyui::trLabel("Installer / réparer le runtime").c_str())){auto args=L"-NoProfile -ExecutionPolicy Bypass -File \""+script.wstring()+L"\"";ShellExecuteW(nullptr,L"open",L"powershell.exe",args.c_str(),productRoot().c_str(),SW_SHOWNORMAL);}}
         }
-        if(ImGui::CollapsingHeader("Connexion IA et modèle",assistantConnected?0:ImGuiTreeNodeFlags_DefaultOpen)){
+        if(ImGui::CollapsingHeader(cyui::trLabel("AI connection and model").c_str(),(assistantConnected||(options.demo&&options.uiFixtures))?0:ImGuiTreeNodeFlags_DefaultOpen)){
             const char* names[]={"Codex · compte CLI","Claude Code · compte CLI","Ollama · serveur local","OpenRouter · API","Claude · API","OpenCode · CLI","Antigravity · CLI"};
-            if(cyui::beginProperties("##aiConnection",cyui::dp(145))){
-                cyui::property("Fournisseur");if(cyui::combo("##provider",&provider,names,7))aiEndpoint.fill(0);
-                cyui::property("Modèle");ImGui::InputTextWithHint("##model","Défaut du fournisseur / ID exact",aiModel.data(),aiModel.size());
-                if(!aiModels.empty()){cyui::property("Catalogue");if(ImGui::BeginCombo("##models","Choisir un modèle découvert")){for(const auto& m:aiModels){auto model=m.is_string()?m.get<std::string>():m.value("model",m.value("id",std::string()));if(!model.empty()&&ImGui::Selectable(model.c_str()))strncpy_s(aiModel.data(),aiModel.size(),model.c_str(),_TRUNCATE);}ImGui::EndCombo();}}
-                if(provider>=2&&provider<=4){cyui::property("URL du serveur");ImGui::InputTextWithHint("##endpoint",provider==2?"http://127.0.0.1:11434":provider==3?"https://openrouter.ai/api/v1":"https://api.anthropic.com/v1",aiEndpoint.data(),aiEndpoint.size());cyui::property("Variable de clé API");ImGui::InputTextWithHint("##keyEnv","Nom de variable (facultatif)",aiKeyEnv.data(),aiKeyEnv.size());cyui::property("Clé API · session");ImGui::InputTextWithHint("##sessionApiKey","Non enregistrée sur disque",aiKey.data(),aiKey.size(),ImGuiInputTextFlags_Password);}
-                else {cyui::property("Exécutable CLI");ImGui::InputTextWithHint("##aiExecutable","Détection automatique",aiExecutable.data(),aiExecutable.size());}
+            if(cyui::beginProperties("##aiConnection",145)){
+                cyui::property(cyui::tr("Provider").c_str());if(cyui::combo("##provider",&provider,names,7))aiEndpoint.fill(0);
+                cyui::property(cyui::tr("Model").c_str());ImGui::InputTextWithHint("##model","Défaut du fournisseur / ID exact",aiModel.data(),aiModel.size());
+                if(!aiModels.empty()){cyui::property(cyui::tr("Catalogue").c_str());if(ImGui::BeginCombo("##models","Choisir un modèle découvert")){for(const auto& m:aiModels){auto model=m.is_string()?m.get<std::string>():m.value("model",m.value("id",std::string()));if(!model.empty()&&ImGui::Selectable(model.c_str()))strncpy_s(aiModel.data(),aiModel.size(),model.c_str(),_TRUNCATE);}ImGui::EndCombo();}}
+                if(provider>=2&&provider<=4){cyui::property(cyui::tr("URL du serveur").c_str());ImGui::InputTextWithHint("##endpoint",provider==2?"http://127.0.0.1:11434":provider==3?"https://openrouter.ai/api/v1":"https://api.anthropic.com/v1",aiEndpoint.data(),aiEndpoint.size());cyui::property(cyui::tr("Variable de clé API").c_str());ImGui::InputTextWithHint("##keyEnv","Nom de variable (facultatif)",aiKeyEnv.data(),aiKeyEnv.size());cyui::property(cyui::tr("Session API key").c_str());ImGui::InputTextWithHint("##sessionApiKey","Non enregistrée sur disque",aiKey.data(),aiKey.size(),ImGuiInputTextFlags_Password);}
+                else {cyui::property(cyui::tr("Exécutable CLI").c_str());ImGui::InputTextWithHint("##aiExecutable","Détection automatique",aiExecutable.data(),aiExecutable.size());}
                 cyui::endProperties();
             }
-            {cyui::ScopedDisabled disabled(!assistantReady||assistantBusy||options.demo);if(cyui::button("Connecter / appliquer le profil")){
+            {cyui::ScopedDisabled disabled(!assistantReady||assistantBusy||options.demo);if(cyui::button(cyui::trLabel("Connect / apply profile").c_str())){
                 const char* ids[]={"codex","claude-code","ollama","openrouter","anthropic","opencode","antigravity"};Json config={{"connector",ids[provider]},{"model",aiModel.data()},{"endpoint",aiEndpoint.data()},{"executable",aiExecutable.data()},{"api_key_env",aiKeyEnv.data()}};
                 assistant->send({{"type","connect"},{"config",config},{"apiKey",aiKey.data()}});SecureZeroMemory(aiKey.data(),aiKey.size());assistantConnected=false;assistantBusy=true;
-                Json profile={{"provider",provider},{"model",aiModel.data()},{"endpoint",aiEndpoint.data()},{"executable",aiExecutable.data()},{"api_key_env",aiKeyEnv.data()}};std::ofstream out(userRoot()/L"ai-profile.json");out<<profile.dump(2);chat.push_back({"Système","Connexion au fournisseur sélectionné…"});
+                Json profile={{"provider",provider},{"model",aiModel.data()},{"endpoint",aiEndpoint.data()},{"executable",aiExecutable.data()},{"api_key_env",aiKeyEnv.data()}};std::ofstream out(userRoot()/L"ai-profile.json");out<<profile.dump(2);appendChat("System","Connecting to the selected provider…");
             }}
             cyui::textFaint("Codex : outils QuestDev natifs. Autres fournisseurs : discussion avec contexte ; contrôle externe par MCP.");
         }
         cyui::space(8);
         float historyHeight=std::max(cyui::dp(100),ImGui::GetContentRegionAvail().y-cyui::dp(140));
-        ImGui::BeginChild("##chatHistory",ImVec2(0,historyHeight),ImGuiChildFlags_Borders);
-        if(chat.empty()){cyui::space(20);cyui::heading("Travailler avec le contexte du Quest",2);ImGui::TextWrapped("Connectez une IA puis demandez, par exemple : analyse les erreurs de l’application sélectionnée. Les logs et les résultats ADB sont traités comme des données, pas comme des instructions.");}
-        for(size_t i=0;i<chat.size();++i){ImGui::PushID(int(i));cyui::overline(chat[i].first.c_str());ImGui::TextWrapped("%s",chat[i].second.c_str());if(cyui::ghostButton("Copier"))ImGui::SetClipboardText(chat[i].second.c_str());cyui::divider();ImGui::PopID();}
-        if(assistantBusy)ImGui::SetScrollY(ImGui::GetScrollMaxY());ImGui::EndChild();
+        if(chat.empty()){ImGui::BeginChild("##emptyConversation",ImVec2(0,historyHeight));cyui::emptyState(cyui::tr("Work with Quest context").c_str(),cyui::tr("Connect an AI provider and ask it to analyse the selected application. Logs are data, not instructions.").c_str(),cyui::icon::code);ImGui::EndChild();}
+        else {
+            auto displayed=chat;for(auto& message:displayed)message.role=cyui::tr(message.role.c_str());
+            auto result=cyui::transcript("##chatHistory",floating?floatingTranscript:mainTranscript,displayed,ImVec2(-1,historyHeight));
+            if(result.copy)for(const auto& message:chat)if(message.id==result.copy)ImGui::SetClipboardText(message.content.c_str());
+            if(!result.link.empty()&&result.link.size()<=4096&&result.link.find_first_of("\r\n") == std::string::npos&&(result.link.rfind("https://",0)==0||result.link.rfind("http://",0)==0)){chatLink=result.link;confirmChatLink=true;}
+        }
         ImGui::InputTextMultiline("##prompt",aiPrompt.data(),aiPrompt.size(),ImVec2(-1,cyui::dp(80)));
-        {cyui::ScopedDisabled disabled(!assistantReady||!assistantConnected||assistantBusy||options.demo);if(cyui::primaryButton("Envoyer") || (ImGui::GetIO().KeyCtrl&&ImGui::IsKeyPressed(ImGuiKey_Enter)&&!assistantBusy&&assistantConnected)){
-            auto text=trim(aiPrompt.data());if(!text.empty()){assistant->send({{"type","context"},{"context",contextSnapshot()}});assistant->send({{"type","chat"},{"message",text},{"includeContext",sendContext},{"includeLogs",sendLogs}});chat.push_back({"Vous",text});aiPrompt.fill(0);assistantBusy=true;}
+        {cyui::ScopedDisabled disabled(!assistantReady||!assistantConnected||assistantBusy||options.demo);if(cyui::primaryButton(cyui::trLabel("Send").c_str()) || (ImGui::GetIO().KeyCtrl&&ImGui::IsKeyPressed(ImGuiKey_Enter)&&!assistantBusy&&assistantConnected)){
+            auto text=trim(aiPrompt.data());if(!text.empty()){assistant->send({{"type","context"},{"context",contextSnapshot()}});assistant->send({{"type","chat"},{"message",text},{"includeContext",sendContext},{"includeLogs",sendLogs}});appendChat("You",text);aiPrompt.fill(0);assistantBusy=true;}
         }}
-        ImGui::SameLine();if(assistantBusy&&cyui::button("Arrêter"))assistant->send({{"type","cancel"}});
-        ImGui::SameLine();if(cyui::button("Exporter la discussion…")){auto path=fileDialog(true,L"Texte\0*.txt\0\0",L"txt",L"questdev-conversation.txt");if(!path.empty()){std::ofstream out(path,std::ios::binary);for(const auto& line:chat)out<<line.first<<"\n"<<line.second<<"\n\n";}}
+        ImGui::SameLine();if(assistantBusy&&cyui::button(cyui::trLabel("Stop").c_str()))assistant->send({{"type","cancel"}});
+        ImGui::SameLine();if(cyui::button(cyui::trLabel("Export conversation…").c_str())){auto path=fileDialog(true,L"Texte\0*.txt\0\0",L"txt",L"questdev-conversation.txt");if(!path.empty()){std::ofstream out(path,std::ios::binary);for(const auto& line:chat)out<<line.role<<"\n"<<line.content<<"\n\n";}}
     }
     void launchUpdate(const Json& value) {
         auto plan=std::filesystem::path(widen(value.at("plan").get<std::string>()));auto python=std::filesystem::path(widen(value.at("python").get<std::string>()));auto script=std::filesystem::path(widen(value.at("script").get<std::string>()));auto ready=std::filesystem::path(widen(value.at("ready").get<std::string>()));
@@ -1006,137 +1032,140 @@ struct App::Impl {
         updateBridge->send(message);if(std::string(kind)!="cancel")updateState["busy"]=true;
     }
     void updatesPage() {
-        cyui::panelHeader("Mises à jour GitHub","Téléchargement vérifié, sauvegarde de la version actuelle et redémarrage.");cyui::space(10);
+        cyui::panelHeader(cyui::tr("GitHub updates").c_str(),cyui::tr("Téléchargement vérifié, sauvegarde de la version actuelle et redémarrage.").c_str());cyui::space(10);
         bool busy=updateState.value("busy",false),available=updateState.contains("release")&&!updateState["release"].is_null(),downloaded=updateState.value("downloaded",false);auto prefs=updateState.value("prefs",Json::object());
-        if(cyui::beginCard("##updates","CYVR QUESTDEV")){
+        if(cyui::beginCard("##updates",cyui::tr("CYVR QUESTDEV").c_str())){
             cyui::heading((std::string("Version ")+AppVersion).c_str(),2);cyui::textDim("Source : MrMybal / CyVR_QuestDev · Windows x64");
             {cyui::ScopedDisabled disabled(busy||options.demo||!updateBridge||!updateBridge->running());
                 int channel=prefs.value("channel",std::string("alpha"))=="stable"?0:1;bool automatic=prefs.value("autoCheck",false),git=prefs.value("useGit",true);bool changed=false;
-                if(cyui::beginProperties("##updatePrefs",cyui::dp(210))){const char* channels[]={"Versions stables","Alpha et préversions"};cyui::property("Canal de mise à jour");if(cyui::combo("##updateChannel",&channel,channels,2,-1))changed=true;
-                    cyui::property("Rechercher au démarrage");if(cyui::toggleSwitch("##updateAutomatic",&automatic))changed=true;
-                    cyui::property("Connexion Git existante");if(cyui::toggleSwitch("##updateGit",&git))changed=true;cyui::endProperties();}
+                if(cyui::beginProperties("##updatePrefs",210)){const char* channels[]={"Versions stables","Alpha et préversions"};cyui::property(cyui::tr("Canal de mise à jour").c_str());if(cyui::combo("##updateChannel",&channel,channels,2,-1))changed=true;
+                    cyui::property(cyui::tr("Rechercher au démarrage").c_str());if(cyui::toggleSwitch("##updateAutomatic",&automatic))changed=true;
+                    cyui::property(cyui::tr("Connexion Git existante").c_str());if(cyui::toggleSwitch("##updateGit",&git))changed=true;cyui::endProperties();}
                 if(changed)updateBridge->send({{"type","preferences"},{"values",{{"channel",channel?"alpha":"stable"},{"autoCheck",automatic},{"useGit",git}}}});
-                if(cyui::button("Rechercher une mise à jour"))updateAction("check");
+                if(cyui::button(cyui::trLabel("Rechercher une mise à jour").c_str()))updateAction("check");
             }
             cyui::space(8);ImGui::TextWrapped("%s",updateState.value("status",std::string()).c_str());
-            if(busy){auto phase=updateState.value("phase",std::string());cyui::progressBar(phase=="downloading"?float(updateState.value("progress",0.0)):-1.0f,ImVec2(-1,0));if(phase=="checking"||phase=="downloading")if(cyui::ghostButton("Annuler"))updateAction("cancel");}
+            if(busy){auto phase=updateState.value("phase",std::string());cyui::progressBar(phase=="downloading"?float(updateState.value("progress",0.0)):-1.0f,ImVec2(-1,0));if(phase=="checking"||phase=="downloading")if(cyui::ghostButton(cyui::trLabel("Cancel").c_str()))updateAction("cancel");}
             if(available){auto release=updateState["release"];cyui::space(8);cyui::heading(("Disponible : "+release.value("version",std::string())).c_str(),3);cyui::textDim("%.1f Mo",release.value("size",0.0)/(1024*1024));
-                {cyui::ScopedDisabled disabled(busy||options.demo);if(!downloaded){if(cyui::primaryButton("Télécharger et vérifier"))updateAction("download");}else{bool recording=videoMirror->state().active||recordTask||files->busy()||metrics->describe().value("recording",false);bool portable=isFile((appRoot()/L"RELEASE.json").wstring());{cyui::ScopedDisabled blocked(recording||!portable);if(cyui::primaryButton("Installer et redémarrer"))updateAction("install");}if(recording)cyui::textFaint("Terminez les transferts et arrêtez les enregistrements / mirroring avant l’installation.");if(!portable)cyui::textFaint("Build de développement : installez une archive portable pour la mise à jour intégrée.");}}
+                {cyui::ScopedDisabled disabled(busy||options.demo);if(!downloaded){if(cyui::primaryButton(cyui::trLabel("Télécharger et vérifier").c_str()))updateAction("download");}else{bool recording=videoMirror->state().active||recordTask||files->busy()||metrics->describe().value("recording",false);bool portable=isFile((appRoot()/L"RELEASE.json").wstring());{cyui::ScopedDisabled blocked(recording||!portable);if(cyui::primaryButton(cyui::trLabel("Installer et redémarrer").c_str()))updateAction("install");}if(recording)cyui::textFaint("Terminez les transferts et arrêtez les enregistrements / mirroring avant l’installation.");if(!portable)cyui::textFaint("Build de développement : installez une archive portable pour la mise à jour intégrée.");}}
                 if(ImGui::CollapsingHeader("Notes de version")){ImGui::PushTextWrapPos();ImGui::TextUnformatted(release.value("notes",std::string()).c_str());ImGui::PopTextWrapPos();}
             }
             if(!updateState.value("error",std::string()).empty())cyui::callout(cyui::Tone::error,updateState["error"].get<std::string>().c_str());
         }cyui::endCard();cyui::space(10);
-        if(cyui::beginCard("##updateAuth","ACCÈS AU DÉPÔT PRIVÉ")){
+        if(cyui::beginCard("##updateAuth",cyui::tr("ACCÈS AU DÉPÔT PRIVÉ").c_str())){
             ImGui::TextWrapped("Le compte GitHub doit avoir accès au dépôt. Utilisez la connexion Git existante ou un jeton à accès fin limité à ce dépôt, avec Contents en lecture.");
             cyui::textFaint("%s",updateState.value("savedCredential",false)?"Jeton conservé dans le Gestionnaire d’identifiants Windows.":"Aucun jeton spécifique enregistré dans Windows.");
             {cyui::ScopedDisabled disabled(busy||options.demo||!updateBridge||!updateBridge->running());ImGui::SetNextItemWidth(-1);ImGui::InputTextWithHint("##updateToken","Jeton GitHub (masqué)",updateToken.data(),updateToken.size(),ImGuiInputTextFlags_Password);
-                if(cyui::button("Enregistrer dans Windows")){updateBridge->send({{"type","save_token"},{"token",updateToken.data()}});SecureZeroMemory(updateToken.data(),updateToken.size());}ImGui::SameLine();if(cyui::ghostButton("Oublier ce jeton"))updateBridge->send({{"type","forget_token"}});}
-            if(cyui::ghostButton("Créer un jeton sur GitHub"))ShellExecuteW(nullptr,L"open",L"https://github.com/settings/personal-access-tokens/new",nullptr,nullptr,SW_SHOWNORMAL);
+                if(cyui::button(cyui::trLabel("Enregistrer dans Windows").c_str())){updateBridge->send({{"type","save_token"},{"token",updateToken.data()}});SecureZeroMemory(updateToken.data(),updateToken.size());}ImGui::SameLine();if(cyui::ghostButton(cyui::trLabel("Oublier ce jeton").c_str()))updateBridge->send({{"type","forget_token"}});}
+            if(cyui::ghostButton(cyui::trLabel("Créer un jeton sur GitHub").c_str()))ShellExecuteW(nullptr,L"open",L"https://github.com/settings/personal-access-tokens/new",nullptr,nullptr,SW_SHOWNORMAL);
         }cyui::endCard();cyui::space(10);
-        if(cyui::beginCard("##updateBackup","VERSION PRÉCÉDENTE")){
+        if(cyui::beginCard("##updateBackup",cyui::tr("VERSION PRÉCÉDENTE").c_str())){
             if(files->busy())cyui::callout(cyui::Tone::warning,"Terminez ou annulez votre liste de transferts avant de redémarrer pour une mise à jour.");
             ImGui::TextWrapped("La version actuelle est sauvegardée avant le remplacement. Les préférences utilisateur et les plugins personnels sont conservés. Si le nouveau démarrage échoue, la sauvegarde est restaurée.");
-            auto previous=updateState.value("previousVersion",std::string());if(!previous.empty()){cyui::textDim("Sauvegarde : %s",previous.c_str());{cyui::ScopedDisabled disabled(busy||options.demo||videoMirror->state().active||recordTask||files->busy()||metrics->describe().value("recording",false));if(cyui::button("Restaurer et redémarrer"))updateAction("rollback");}}
-            if(cyui::ghostButton("Ouvrir le dossier des mises à jour")){auto path=userRoot()/L"updates";std::filesystem::create_directories(path);openLocal(path);}
+            auto previous=updateState.value("previousVersion",std::string());if(!previous.empty()){cyui::textDim("Sauvegarde : %s",previous.c_str());{cyui::ScopedDisabled disabled(busy||options.demo||videoMirror->state().active||recordTask||files->busy()||metrics->describe().value("recording",false));if(cyui::button(cyui::trLabel("Restaurer et redémarrer").c_str()))updateAction("rollback");}}
+            if(cyui::ghostButton(cyui::trLabel("Ouvrir le dossier des mises à jour").c_str())){auto path=userRoot()/L"updates";std::filesystem::create_directories(path);openLocal(path);}
         }cyui::endCard();
     }
     void logSettingsCard(){
-        if(cyui::beginCard("##retention","LIMITES DU JOURNAL")){
+        if(cyui::beginCard("##retention",cyui::tr("LIMITES DU JOURNAL").c_str())){
             ImGui::TextWrapped("La capture conserve les messages les plus récents. Augmentez les limites pour garder davantage d’historique ; la première limite atteinte déclenche la rotation.");cyui::space(8);
-            if(cyui::beginProperties("##retentionProperties",cyui::dp(190))){
-                cyui::property("Nombre de lignes","De 1 000 à 5 000 000 lignes, toutes applications confondues.");ImGui::InputInt("##logLines",&logLines,10000,100000);if(ImGui::IsItemDeactivatedAfterEdit())logLines=std::clamp(logLines,1000,5000000);
-                cyui::property("Mémoire (Mo)","De 16 à 2 048 Mo de données comptabilisées dans le journal. La mémoire totale du processus peut être supérieure.");ImGui::InputInt("##logMemory",&logMemoryMb,64,256);if(ImGui::IsItemDeactivatedAfterEdit())logMemoryMb=std::clamp(logMemoryMb,16,2048);
-                cyui::property("Préréglages");if(cyui::button("Standard")){logLines=50000;logMemoryMb=64;}ImGui::SameLine();if(cyui::button("Étendu")){logLines=250000;logMemoryMb=256;}ImGui::SameLine();if(cyui::button("Longue session")){logLines=1000000;logMemoryMb=1024;}
+            if(cyui::beginProperties("##retentionProperties",190)){
+                cyui::property(cyui::tr("Nombre de lignes").c_str(),"De 1 000 à 5 000 000 lignes, toutes applications confondues.");ImGui::InputInt("##logLines",&logLines,10000,100000);if(ImGui::IsItemDeactivatedAfterEdit())logLines=std::clamp(logLines,1000,5000000);
+                cyui::property(cyui::tr("Mémoire (Mo)").c_str(),"De 16 à 2 048 Mo de données comptabilisées dans le journal. La mémoire totale du processus peut être supérieure.");ImGui::InputInt("##logMemory",&logMemoryMb,64,256);if(ImGui::IsItemDeactivatedAfterEdit())logMemoryMb=std::clamp(logMemoryMb,16,2048);
+                cyui::property(cyui::tr("Préréglages").c_str());if(cyui::button(cyui::trLabel("Standard").c_str())){logLines=50000;logMemoryMb=64;}ImGui::SameLine();if(cyui::button(cyui::trLabel("Étendu").c_str())){logLines=250000;logMemoryMb=256;}ImGui::SameLine();if(cyui::button(cyui::trLabel("Longue session").c_str())){logLines=1000000;logMemoryMb=1024;}
                 cyui::endProperties();
             }
-            {cyui::ScopedDisabled disabled(store.capacity()==size_t(logLines)&&store.byteLimit()==size_t(logMemoryMb)*1024*1024);if(cyui::primaryButton("Appliquer les limites")){logLines=std::clamp(logLines,1000,5000000);logMemoryMb=std::clamp(logMemoryMb,16,2048);store.setLimits(size_t(logLines),size_t(logMemoryMb)*1024*1024);saveSettings();cyui::notify("Limites du journal appliquées et enregistrées.",cyui::Tone::success);}}
+            {cyui::ScopedDisabled disabled(store.capacity()==size_t(logLines)&&store.byteLimit()==size_t(logMemoryMb)*1024*1024);if(cyui::primaryButton(cyui::trLabel("Appliquer les limites").c_str())){logLines=std::clamp(logLines,1000,5000000);logMemoryMb=std::clamp(logMemoryMb,16,2048);store.setLimits(size_t(logLines),size_t(logMemoryMb)*1024*1024);saveSettings();cyui::notify("Limites du journal appliquées et enregistrées.",cyui::Tone::success);}}
             cyui::space(6);cyui::textDim("Limites actives : %zu lignes / %zu Mo · %zu lignes conservées",store.capacity(),store.byteLimit()/(1024*1024),store.entries().size());
             cyui::textFaint("Réduire les limites retire immédiatement les messages les plus anciens en excès.\nLa pause suspend l’affichage ; la capture continue. L’export contient la vue filtrée.");
         }cyui::endCard();
     }
     void settings() {
         if(settingsSection==1){updatesPage();return;}
-        if(settingsSection==2){cyui::panelHeader("Limites du journal","Choisissez l’historique conservé pendant vos sessions de développement.");cyui::space(12);logSettingsCard();return;}
-        cyui::panelHeader("Réglages", "Connexion, apparence et fonctionnement du journal.");cyui::space(12);
-        if(cyui::beginCard("##license","CYVR QUESTDEV · GPLv3")) {
+        if(settingsSection==2){cyui::panelHeader(cyui::tr("Log limits").c_str(),cyui::tr("Choisissez l’historique conservé pendant vos sessions de développement.").c_str());cyui::space(12);logSettingsCard();return;}
+        cyui::panelHeader("Settings", "Connexion, apparence et fonctionnement du journal.");cyui::space(12);
+        if(cyui::beginCard("##license",cyui::tr("CYVR QUESTDEV · GPLv3").c_str())) {
             cyui::textDim("Copyright © 2026 Cyberalien · GPL-3.0-only");
             ImGui::TextWrapped("Logiciel libre : vous pouvez le redistribuer et le modifier selon la GNU GPL version 3. Fourni sans aucune garantie. Les composants tiers conservent leurs propres licences.");
-            if(cyui::button("Lire la licence GPLv3"))openLocal(appRoot()/L"LICENSE.txt");
-            ImGui::SameLine();if(cyui::button("Mises à jour GitHub…"))settingsSection=1;
+            if(cyui::button(cyui::trLabel("Lire la licence GPLv3").c_str()))openLocal(appRoot()/L"LICENSE.txt");
+            ImGui::SameLine();if(cyui::button(cyui::trLabel("Mises à jour GitHub…").c_str()))settingsSection=1;
         }cyui::endCard();cyui::space(10);
-        if(cyui::beginCard("##adb","ANDROID DEBUG BRIDGE")) {
-            if(cyui::beginProperties("##adbProps",cyui::dp(140))) {
-                cyui::property("Exécutable ADB");ImGui::InputText("##adbPath",adbField.data(),adbField.size());
-                cyui::property("Détection");if(cyui::ghostButton("Rechercher adb.exe")){auto p=findAdb();strncpy_s(adbField.data(),adbField.size(),narrow(p).c_str(),_TRUNCATE);}
-                ImGui::SameLine();if(cyui::ghostButton("Parcourir…")){auto p=fileDialog(false,L"Android Debug Bridge (adb.exe)\0adb.exe\0\0",L"exe");if(!p.empty())strncpy_s(adbField.data(),adbField.size(),narrow(p).c_str(),_TRUNCATE);}
-                cyui::property("Appliquer");{cyui::ScopedDisabled disabled(options.demo);if(cyui::button("Utiliser cet ADB")){auto p=widen(adbField.data());if(isFile(p)){adb=p;backend->setAdb(adb);serial.clear();files->tick("",session+1,false,false);store.reset();packages.clear();saveSettings();cyui::notify("ADB configuré",cyui::Tone::success);}else cyui::notify("Le fichier ADB n’existe pas.",cyui::Tone::error);}}
+        if(cyui::beginCard("##adb",cyui::tr("ANDROID DEBUG BRIDGE").c_str())) {
+            if(cyui::beginProperties("##adbProps",140)) {
+                cyui::property(cyui::tr("Exécutable ADB").c_str());ImGui::InputText("##adbPath",adbField.data(),adbField.size());
+                cyui::property(cyui::tr("Détection").c_str());if(cyui::ghostButton(cyui::trLabel("Rechercher adb.exe").c_str())){auto p=findAdb();strncpy_s(adbField.data(),adbField.size(),narrow(p).c_str(),_TRUNCATE);}
+                ImGui::SameLine();if(cyui::ghostButton(cyui::trLabel("Parcourir…").c_str())){auto p=fileDialog(false,L"Android Debug Bridge (adb.exe)\0adb.exe\0\0",L"exe");if(!p.empty())strncpy_s(adbField.data(),adbField.size(),narrow(p).c_str(),_TRUNCATE);}
+                cyui::property(cyui::tr("Apply").c_str());{cyui::ScopedDisabled disabled(options.demo);if(cyui::button(cyui::trLabel("Utiliser cet ADB").c_str())){auto p=widen(adbField.data());if(isFile(p)){adb=p;backend->setAdb(adb);serial.clear();files->tick("",session+1,false,false);store.reset();packages.clear();saveSettings();cyui::notify("ADB configuré",cyui::Tone::success);}else cyui::notify("Le fichier ADB n’existe pas.",cyui::Tone::error);}}
                 cyui::endProperties();
             }
             cyui::textFaint("Détection : dossier de l’EXE, SDK Android, puis PATH.");
         }cyui::endCard();cyui::space(10);
-        if(cyui::beginCard("##appearance","APPARENCE")) {
-            if(cyui::beginProperties("##appearanceProps",cyui::dp(140))) {
-                cyui::property("Thème");if(ImGui::BeginCombo("##theme",cyui::currentThemeKey().c_str())){for(const auto& t:cyui::builtInThemes())if(ImGui::Selectable(t.name.c_str(),t.key==cyui::currentThemeKey())){cyui::setTheme(t.key.c_str());saveSettings();}ImGui::EndCombo();}
-                cyui::property("Densité");const char* names[]={"Compacte","Confortable"};int d=cyui::density()==cyui::Density::compact?0:1;if(cyui::combo("##density",&d,names,2))cyui::setDensity(d?cyui::Density::comfortable:cyui::Density::compact);
+        if(cyui::beginCard("##appearance",cyui::tr("Appearance").c_str())) {
+            if(cyui::beginProperties("##appearanceProps",140)) {
+                cyui::property(cyui::tr("Language").c_str());const char* languages[]={"English","Français"};int language=cyui::locale()=="fr"?1:0;if(cyui::combo("##language",&language,languages,2)){cyui::setLocale(language?"fr":"en");saveSettings();}
+                cyui::property(cyui::tr("Theme").c_str());if(ImGui::BeginCombo("##theme",cyui::currentThemeKey().c_str())){for(const auto& t:cyui::builtInThemes())if(ImGui::Selectable(t.name.c_str(),t.key==cyui::currentThemeKey())){cyui::setTheme(t.key.c_str());saveSettings();}ImGui::EndCombo();}
+                cyui::property(cyui::tr("Density").c_str());const char* names[]={"Compact","Comfortable"};int d=cyui::density()==cyui::Density::compact?0:1;if(cyui::combo("##density",&d,names,2)){cyui::setDensity(d?cyui::Density::comfortable:cyui::Density::compact);saveSettings();}
                 cyui::endProperties();
             }
         }cyui::endCard();cyui::space(10);
-        if(cyui::beginCard("##help","CONNEXION AU QUEST")) {
+        if(cyui::beginCard("##help",cyui::tr("CONNEXION AU QUEST").c_str())) {
             ImGui::TextWrapped("1. Activez le mode développeur du casque.\n2. Branchez le Quest en USB et acceptez le débogage USB dans le casque.\n3. Sélectionnez le casque en haut de la fenêtre.");
             cyui::space(8);cyui::textDim("Wi-Fi : connexion à un casque dont ADB TCP/IP est déjà activé.");
             cyui::textField("##network",network.data(),int(network.size()),"192.168.1.42:5555",cyui::dp(250));ImGui::SameLine();
-            {cyui::ScopedDisabled disabled(options.demo);if(cyui::button("Connecter"))backend->action("connect",network.data());}
+            {cyui::ScopedDisabled disabled(options.demo);if(cyui::button(cyui::trLabel("Connect").c_str()))backend->action("connect",network.data());}
             cyui::space(8);cyui::textFaint("Unauthorized : acceptez l’autorisation dans le casque. Offline : rebranchez puis actualisez.");
         }cyui::endCard();cyui::space(10);
         logSettingsCard();
         cyui::textFaint("Les origines inconnues restent dans Système / non attribué. Aucun rattachement approximatif par UID partagé.");
     }
     void modals() {
-        if(cyui::beginModal("Mirroring vidéo",&mirrorSetup,720)){
-            auto video=videoMirror->state();cyui::heading("Mirroring du Quest",2);cyui::textDim("%s",video.active?video.status.c_str():"Flux vidéo dans une fenêtre dédiée · F11 pour le plein écran");cyui::space(8);
+        if(cyui::beginModal(cyui::trLabel("Open external link").c_str(),&confirmChatLink,620)){ImGui::TextWrapped("%s",chatLink.c_str());if(cyui::modalButtons("Open in browser","Cancel")==1)openLocal(widen(chatLink));cyui::endModal();}
+
+        if(cyui::beginModal(cyui::trLabel("Mirroring vidéo").c_str(),&mirrorSetup,720)){
+            auto video=videoMirror->state();cyui::heading(cyui::tr("Mirroring du Quest").c_str(),2);cyui::textDim("%s",video.active?video.status.c_str():"Flux vidéo dans une fenêtre dédiée · F11 pour le plein écran");cyui::space(8);
             {cyui::ScopedDisabled disabled(video.active);
-                if(cyui::beginProperties("##mirrorProperties",cyui::dp(180))){
-                    cyui::property("Résolution maximale");ImGui::SliderInt("##mirrorSize",&mirrorDraft.maxSize,256,4096,"%d px");
-                    cyui::property("Fréquence maximale");ImGui::SliderInt("##mirrorFps",&mirrorDraft.maxFps,15,120,"%d FPS");
-                    cyui::property("Débit vidéo");ImGui::SliderInt("##mirrorRate",&mirrorDraft.bitRateMbps,1,100,"%d Mbit/s");
-                    cyui::property("Audio PC");const char* audio[]={"Désactivé","Dupliquer · garder le son du casque","PC seulement · coupe le son du casque"};cyui::combo("##mirrorAudio",&mirrorDraft.audio,audio,3,-1);
-                    cyui::property("Plein écran au départ");cyui::toggleSwitch("##mirrorFull",&mirrorDraft.fullscreen);
-                    cyui::property("Toujours au premier plan");cyui::toggleSwitch("##mirrorTop",&mirrorDraft.alwaysOnTop);
-                    cyui::property("Recadrage personnalisé");cyui::toggleSwitch("##mirrorCrop",&mirrorCrop);
-                    if(mirrorCrop){cyui::property("Largeur / hauteur");ImGui::SetNextItemWidth(cyui::dp(125));ImGui::InputInt("##cropW",&mirrorDraft.cropWidth);ImGui::SameLine();ImGui::SetNextItemWidth(cyui::dp(125));ImGui::InputInt("##cropH",&mirrorDraft.cropHeight);cyui::property("Décalage X / Y");ImGui::SetNextItemWidth(cyui::dp(125));ImGui::InputInt("##cropX",&mirrorDraft.cropX);ImGui::SameLine();ImGui::SetNextItemWidth(cyui::dp(125));ImGui::InputInt("##cropY",&mirrorDraft.cropY);}
-                    cyui::property("Enregistrement du flux");if(cyui::button("Choisir un fichier MKV…")){auto file=fileDialog(true,L"Vidéo Matroska (*.mkv)\0*.mkv\0\0",L"mkv",L"quest-mirroring.mkv");if(!file.empty()){mirrorDraft.recording=file;mirrorDraft.overwriteRecording=true;}}if(!mirrorDraft.recording.empty()){cyui::textDim("%s",mirrorDraft.recording.filename().u8string().c_str());if(cyui::ghostButton("Sans enregistrement"))mirrorDraft.recording.clear();}
+                if(cyui::beginProperties("##mirrorProperties",180)){
+                    cyui::property(cyui::tr("Résolution maximale").c_str());ImGui::SliderInt("##mirrorSize",&mirrorDraft.maxSize,256,4096,"%d px");
+                    cyui::property(cyui::tr("Fréquence maximale").c_str());ImGui::SliderInt("##mirrorFps",&mirrorDraft.maxFps,15,120,"%d FPS");
+                    cyui::property(cyui::tr("Débit vidéo").c_str());ImGui::SliderInt("##mirrorRate",&mirrorDraft.bitRateMbps,1,100,"%d Mbit/s");
+                    cyui::property(cyui::tr("Audio PC").c_str());const char* audio[]={"Désactivé","Dupliquer · garder le son du casque","PC seulement · coupe le son du casque"};cyui::combo("##mirrorAudio",&mirrorDraft.audio,audio,3,-1);
+                    cyui::property(cyui::tr("Plein écran au départ").c_str());cyui::toggleSwitch("##mirrorFull",&mirrorDraft.fullscreen);
+                    cyui::property(cyui::tr("Toujours au premier plan").c_str());cyui::toggleSwitch("##mirrorTop",&mirrorDraft.alwaysOnTop);
+                    cyui::property(cyui::tr("Recadrage personnalisé").c_str());cyui::toggleSwitch("##mirrorCrop",&mirrorCrop);
+                    if(mirrorCrop){cyui::property(cyui::tr("Largeur / hauteur").c_str());ImGui::SetNextItemWidth(cyui::dp(125));ImGui::InputInt("##cropW",&mirrorDraft.cropWidth);ImGui::SameLine();ImGui::SetNextItemWidth(cyui::dp(125));ImGui::InputInt("##cropH",&mirrorDraft.cropHeight);cyui::property(cyui::tr("Décalage X / Y").c_str());ImGui::SetNextItemWidth(cyui::dp(125));ImGui::InputInt("##cropX",&mirrorDraft.cropX);ImGui::SameLine();ImGui::SetNextItemWidth(cyui::dp(125));ImGui::InputInt("##cropY",&mirrorDraft.cropY);}
+                    cyui::property(cyui::tr("Enregistrement du flux").c_str());if(cyui::button(cyui::trLabel("Choisir un fichier MKV…").c_str())){auto file=fileDialog(true,L"Vidéo Matroska (*.mkv)\0*.mkv\0\0",L"mkv",L"quest-mirroring.mkv");if(!file.empty()){mirrorDraft.recording=file;mirrorDraft.overwriteRecording=true;}}if(!mirrorDraft.recording.empty()){cyui::textDim("%s",mirrorDraft.recording.filename().u8string().c_str());if(cyui::ghostButton(cyui::trLabel("Sans enregistrement").c_str()))mirrorDraft.recording.clear();}
                     cyui::endProperties();
                 }
             }
             cyui::textFaint("La duplication audio nécessite Android 13+ et peut être refusée par une application.\nLe contrôle clavier/souris du casque est désactivé. Le débit réel dépend du casque et de la liaison ADB.");
             if(video.active){cyui::space(6);cyui::textMono("%d × %d · %d FPS · audio : %s",video.width,video.height,video.fps,(video.audioStatus=="off"?"désactivé":video.audioStatus=="unavailable"?"indisponible":video.audioStatus=="requested_duplicate"?"duplication demandée":"sortie PC demandée"));}
-            if(!video.recordingFile.empty()){cyui::textDim("%s : %s",video.recording?"Enregistrement":"Dernier fichier",video.recordingFile.filename().u8string().c_str());if(!video.active&&cyui::ghostButton("Ouvrir le dossier du fichier"))openLocal(video.recordingFile.parent_path());}
+            if(!video.recordingFile.empty()){cyui::textDim("%s : %s",video.recording?"Enregistrement":"Dernier fichier",video.recordingFile.filename().u8string().c_str());if(!video.active&&cyui::ghostButton(cyui::trLabel("Ouvrir le dossier du fichier").c_str()))openLocal(video.recordingFile.parent_path());}
             if(!video.error.empty())cyui::callout(cyui::Tone::error,video.error.c_str());
-            if(ImGui::CollapsingHeader("Journal du mirroring")){ImGui::BeginChild("##mirrorLog",cyui::dp(0,120),ImGuiChildFlags_Borders);ImGui::TextUnformatted(video.log.c_str());ImGui::EndChild();if(cyui::ghostButton("Copier le journal"))ImGui::SetClipboardText(video.log.c_str());}
-            cyui::space(10);{cyui::ScopedDisabled disabled(video.active||!online||options.demo);if(cyui::primaryButton("Démarrer la diffusion")){try{auto config=mirrorDraft;if(!mirrorCrop)config.cropWidth=config.cropHeight=config.cropX=config.cropY=0;mirrorUi.push_back(videoMirror->start(mirrorEngine,adb,serial,config));mirrorDraft.recording.clear();mirrorDraft.overwriteRecording=false;mirrorSetup=false;ImGui::CloseCurrentPopup();}catch(const std::exception& error){cyui::notify(error.what(),cyui::Tone::error);}}}ImGui::SameLine();if(cyui::button("Fermer")){mirrorSetup=false;ImGui::CloseCurrentPopup();}cyui::endModal();
+            if(ImGui::CollapsingHeader("Journal du mirroring")){ImGui::BeginChild("##mirrorLog",cyui::dp(0,120),ImGuiChildFlags_Borders);ImGui::TextUnformatted(video.log.c_str());ImGui::EndChild();if(cyui::ghostButton(cyui::trLabel("Copier le journal").c_str()))ImGui::SetClipboardText(video.log.c_str());}
+            cyui::space(10);{cyui::ScopedDisabled disabled(video.active||!online||options.demo);if(cyui::primaryButton(cyui::trLabel("Démarrer la diffusion").c_str())){try{auto config=mirrorDraft;if(!mirrorCrop)config.cropWidth=config.cropHeight=config.cropX=config.cropY=0;mirrorUi.push_back(videoMirror->start(mirrorEngine,adb,serial,config));mirrorDraft.recording.clear();mirrorDraft.overwriteRecording=false;mirrorSetup=false;ImGui::CloseCurrentPopup();}catch(const std::exception& error){cyui::notify(error.what(),cyui::Tone::error);}}}ImGui::SameLine();if(cyui::button(cyui::trLabel("Close").c_str())){mirrorSetup=false;ImGui::CloseCurrentPopup();}cyui::endModal();
         }
         bool ask=!approvals.empty(),approvalHandled=false;
-        if(cyui::beginModal("Outil IA · autorisation",&ask,700)){
+        if(cyui::beginModal(cyui::trLabel("Outil IA · autorisation").c_str(),&ask,700)){
             if(approvals.empty())ImGui::CloseCurrentPopup();
             if(!approvals.empty()){const auto& request=approvals.front();cyui::heading(request.value("operation",std::string()).c_str(),2);auto params=request.value("parameters",Json::object()).dump(2);ImGui::TextWrapped("%s",params.c_str());cyui::textFaint("Casque cible : %s",serial.c_str());auto choice=cyui::modalButtons("Autoriser cette action","Refuser");if(choice){approvalHandled=true;auto next=approvals.front();approvals.erase(approvals.begin());if(choice==1)executeNative(next);else replyNative(next.value("id",std::string()),false,Json::object(),"Action refusée par l’utilisateur.");}}
             cyui::endModal();
         }
         if(!ask&&!approvalHandled&&!approvals.empty()){auto request=approvals.front();approvals.erase(approvals.begin());replyNative(request.value("id",std::string()),false,Json::object(),"Demande fermée par l’utilisateur.");}
-        if(cyui::beginModal("Action sur le casque",&confirmDevice)) {
+        if(cyui::beginModal(cyui::trLabel("Action sur le casque").c_str(),&confirmDevice)) {
             ImGui::TextWrapped("%s ?",confirmationText.c_str());
-            auto choice=cyui::modalButtons("Exécuter","Annuler",true);if(choice==1)submit(confirmationJob.label,confirmationJob.steps,"device:control");else if(choice==2)deviceRequests.erase("boundary");
+            auto choice=cyui::modalButtons("Run","Cancel",true);if(choice==1)submit(confirmationJob.label,confirmationJob.steps,"device:control");else if(choice==2)deviceRequests.erase("boundary");
             cyui::endModal();
         }
-        if(cyui::beginModal("Créer un plugin",&newPlugin,620)) {
+        if(cyui::beginModal(cyui::trLabel("Créer un plugin").c_str(),&newPlugin,620)) {
             if(cyui::beginProperties("##newPlugin")){
-                cyui::property("Nom");ImGui::InputText("##pluginName",pluginName.data(),pluginName.size());
-                cyui::property("Package Android");ImGui::InputText("##pluginPackage",pluginPackage.data(),pluginPackage.size());
-                cyui::property("Port local PC");ImGui::InputInt("##localPort",&pluginLocalPort);
-                cyui::property("Port du service Quest");ImGui::InputInt("##remotePort",&pluginRemotePort);
+                cyui::property(cyui::tr("Nom").c_str());ImGui::InputText("##pluginName",pluginName.data(),pluginName.size());
+                cyui::property(cyui::tr("Package Android").c_str());ImGui::InputText("##pluginPackage",pluginPackage.data(),pluginPackage.size());
+                cyui::property(cyui::tr("Port local PC").c_str());ImGui::InputInt("##localPort",&pluginLocalPort);
+                cyui::property(cyui::tr("Port du service Quest").c_str());ImGui::InputInt("##remotePort",&pluginRemotePort);
                 cyui::endProperties();
             }
             cyui::textFaint("Le service doit exister dans l’app cible. Les ports ne créent pas ce service.");
-            if(cyui::modalButtons("Créer","Annuler")==1){
+            if(cyui::modalButtons("Créer","Cancel")==1){
                 auto package=trim(pluginPackage.data());if(validPackage(package)&&pluginName[0]&&pluginLocalPort>0&&pluginLocalPort<=65535&&pluginRemotePort>0&&pluginRemotePort<=65535){
                     auto directory=userRoot()/L"plugins";std::filesystem::create_directories(directory);auto path=directory/widen(package+".cyplugin");
                     if(isFile(path.wstring())){newPlugin=true;cyui::notify("Un plugin existe déjà pour ce package. Modifiez son fichier dans le dossier utilisateur.",cyui::Tone::warning);}
@@ -1144,27 +1173,27 @@ struct App::Impl {
                 }else{newPlugin=true;cyui::notify("Nom, package et ports valides requis.",cyui::Tone::error);}
             }cyui::endModal();
         }
-        if(cyui::beginModal("Forcer l’arrêt",&confirmStop)) {
+        if(cyui::beginModal(cyui::trLabel("Forcer l’arrêt").c_str(),&confirmStop)) {
             ImGui::TextWrapped("Arrêter %s sur le casque ?",pendingStop.c_str());
-            if(cyui::modalButtons("Arrêter","Annuler",true)==1 && backend)backend->action("stop",pendingStop);
+            if(cyui::modalButtons("Stop","Cancel",true)==1 && backend)backend->action("stop",pendingStop);
             cyui::endModal();
         }
-        if(cyui::beginModal("Inspecteur de message",&detailsOpen,cyui::dp(800))) {
+        if(cyui::beginModal(cyui::trLabel("Inspecteur de message").c_str(),&detailsOpen,800)) {
             if(detail) {
                 cyui::textDim("%s · %c · PID %d / TID %d",clockText(detail->epoch).c_str(),detail->level,detail->pid,detail->tid);
-                cyui::textMono("%s",detail->package.empty()?"Système / non attribué":detail->package.c_str());
+                cyui::textMono("%s",detail->package.empty()?"System / unassigned":detail->package.c_str());
                 cyui::textFaint("Processus : %s",detail->process.empty()?"inconnu":detail->process.c_str());
                 cyui::sectionTitle(detail->tag.c_str());
                 ImGui::BeginChild("##message",ImVec2(0,cyui::dp(280)),ImGuiChildFlags_Borders);
                 ImGui::TextWrapped("%s",detail->message.c_str());ImGui::EndChild();
-                if(cyui::button("Copier le message"))ImGui::SetClipboardText(formatLog(*detail).c_str());
+                if(cyui::button(cyui::trLabel("Copier le message").c_str()))ImGui::SetClipboardText(formatLog(*detail).c_str());
             } else cyui::textDim("Sélectionnez une ligne dans la console.");
             cyui::endModal();
         }
     }
     void frame() {
         tick();rebuildCounts();
-        if(!ImGui::GetIO().WantTextInput&&!ImGui::IsAnyItemActive()) {
+        if(!ImGui::GetIO().WantTextInput&&!ImGui::IsAnyItemActive()&&!(page==0&&((view.rawMode&&view.rawEditor.focused())||(compare&&second.rawMode&&second.rawEditor.focused())))) {
             if(ImGui::IsKeyPressed(ImGuiKey_F5)&&backend)backend->refresh();
             if(page==0 && ImGui::IsKeyPressed(ImGuiKey_Space))pause(view);
             if(page==0 && ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_L)){store.clear();detail.reset();}
@@ -1182,7 +1211,7 @@ struct App::Impl {
             ImGui::TableNextColumn();ImGui::BeginChild("##sidebar");contextSidebar();ImGui::EndChild();
             ImGui::TableNextColumn();ImGui::BeginChild("##main");if(page==0)console();else if(page==1)applications();else if(page==2)settings();else if(page==3)deviceActions();else if(page==4)terminal();else if(page==5)pluginPage();else if(page==7)filesPage();else if(page==8){metrics->draw();if(metrics->takeConfigureRequest()){for(size_t i=0;i<plugins.size();++i)if(plugins[i].id=="meta.ovr-metrics")selectedPlugin=int(i);page=5;options.pluginTab=0;pluginTabRequest=true;}}else assistantPage();ImGui::EndChild();
             ImGui::EndTable();
-        }ImGui::End();if(floatingAssistant){ImGui::SetNextWindowSize(cyui::dp(850,750),ImGuiCond_FirstUseEver);if(ImGui::Begin("Discussion IA",&floatingAssistant))assistantPage();ImGui::End();}modals();cyui::renderNotifications();
+        }ImGui::End();if(floatingAssistant){ImGui::SetNextWindowSize(cyui::dp(850,750),ImGuiCond_FirstUseEver);if(ImGui::Begin("AI discussion",&floatingAssistant))assistantPage(true);ImGui::End();}modals();cyui::renderNotifications();
     }
 };
 App::App(Options options) : impl_(std::make_unique<Impl>(std::move(options))) {}
@@ -1194,6 +1223,7 @@ std::string App::diagnostics() const {
     for(const auto& [package,c]:impl_->counts)if(c.lines)out<<(package.empty()?"[system/unknown]":package)<<" lines="<<c.lines<<" errors="<<c.errors<<"\n";
     size_t selectedLines=0,foreign=0;for(const auto& e:impl_->store.entries()) {if(e.package==impl_->view.package)++selectedLines;}
     for(auto id:impl_->view.ids)if(auto* e=impl_->find(id))if(!impl_->view.package.empty() && impl_->view.package!="@system" && e->package!=impl_->view.package)++foreign;
+    out<<"locale="<<cyui::locale()<<"\ndensity="<<(cyui::density()==cyui::Density::compact?"compact":"comfortable")<<"\ndpi="<<cyui::dpi()<<"\nchat_messages="<<impl_->chat.size()<<"\nimage_loaded="<<(impl_->preview->texture()!=0)<<"\n";
     out<<"log_raw="<<impl_->view.rawMode<<"\nlog_follow="<<impl_->view.follow<<"\nraw_bytes="<<impl_->view.rawText.size()<<"\n";
     out<<"log_max_lines="<<impl_->store.capacity()<<"\nlog_max_bytes="<<impl_->store.byteLimit()<<"\nfile_workspace="<<impl_->files->describe().dump()<<"\n";
     out<<"selected="<<impl_->view.package<<"\nselected_lines="<<selectedLines<<"\nvisible="<<impl_->view.ids.size()<<"\nforeign_visible="<<foreign<<"\nmodal_open="<<ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId|ImGuiPopupFlags_AnyPopupLevel)<<"\n";

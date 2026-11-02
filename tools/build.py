@@ -6,6 +6,9 @@ import argparse
 import os
 from pathlib import Path
 import subprocess
+import json
+import hashlib
+from cyui_dependency import materialize, REVISION, source_files
 
 
 def main():
@@ -15,13 +18,18 @@ def main():
     args.add_argument('--run', action='store_true')
     args.add_argument('--clean', action='store_true')
     args.add_argument('--cyui', default=os.environ.get('CYUI_ROOT'))
+    args.add_argument('--build-dir', type=Path, default=Path('build/windows'))
     options = args.parse_args()
     cyui = Path(options.cyui).expanduser().resolve() if options.cyui else next(
-        (parent / 'CyImgui_Interface' for parent in root.parents
-         if (parent / 'CyImgui_Interface/include/cyui/CyUI.h').is_file()),
-        root.parent / 'CyImgui_Interface')
-    if not (cyui / 'CMakeLists.txt').is_file():
+        (parent / name for parent in root.parents for name in ('CyUI','CyImgui_Interface')
+         if (parent / name / 'include/cyui/Core.h').is_file()),
+        None)
+    if cyui and not (cyui / 'CMakeLists.txt').is_file():
         raise SystemExit('CyUI introuvable : définir CYUI_ROOT ou passer --cyui avec son dossier source.')
+    if cyui and (cyui/'.cyui-source-manifest.json').exists():
+        source_files(cyui)
+    elif cyui:
+        cyui = materialize(cyui, root/'build/dependencies'/('CyUI-'+REVISION))
     environment = {key.upper(): value for key, value in os.environ.items()}
     vswhere = Path(environment.get('PROGRAMFILES(X86)', r'C:\Program Files (x86)')) / 'Microsoft Visual Studio/Installer/vswhere.exe'
     vs = Path(subprocess.check_output([str(vswhere), '-latest', '-products', '*', '-requires', 'Microsoft.VisualStudio.Component.VC.Tools.x86.x64', '-property', 'installationPath'], env=environment, text=True).strip())
@@ -38,13 +46,15 @@ def main():
     configured['VSLANG'] = '1033'
     cmake = str(cmake_root / 'CMake/bin/cmake.exe')
     ninja = str(cmake_root / 'Ninja/ninja.exe')
-    build = root / 'build/windows'
+    build = (root / options.build_dir).resolve()
     compiler = str(Path(configured['VCTOOLSINSTALLDIR']) / 'bin/Hostx64/x64/cl.exe')
-    subprocess.run([cmake, '-S', str(root), '-B', str(build), '-G', 'Ninja', f'-DCMAKE_MAKE_PROGRAM={ninja}', f'-DCMAKE_CXX_COMPILER={compiler}', '-DCMAKE_BUILD_TYPE=Release', '-DCMAKE_CXX_FLAGS_RELEASE=/O2 /Ob2 /DNDEBUG', f'-DCYUI_ROOT={cyui}', '-DBUILD_TESTING=ON'], env=configured, check=True)
+    subprocess.run([cmake, '-S', str(root), '-B', str(build), '-G', 'Ninja', f'-DCMAKE_MAKE_PROGRAM={ninja}', f'-DCMAKE_CXX_COMPILER={compiler}', '-DCMAKE_BUILD_TYPE=Release', '-DCMAKE_CXX_FLAGS_RELEASE=/O2 /Ob2 /DNDEBUG', f'-DCYUI_ROOT={cyui or str()}', '-DBUILD_TESTING=ON'], env=configured, check=True)
     build_command = [cmake, '--build', str(build), '--parallel', '8']
     if options.clean:
         build_command.append('--clean-first')
     subprocess.run(build_command, env=configured, check=True)
+    exe=build/'CyVR_QuestDev.exe'
+    (build/'UI-BUILD.json').write_text(json.dumps({'cyuiRevision':REVISION,'modules':['Core','Canvas','Plots','Code','CodeEditor','DocumentViews','Images'],'sha256':hashlib.sha256(exe.read_bytes()).hexdigest()},indent=2),encoding='utf-8')
     if options.test:
         ctest = str(cmake_root / 'CMake/bin/ctest.exe')
         subprocess.run([ctest, '--test-dir', str(build), '--output-on-failure'], env=configured, check=True)

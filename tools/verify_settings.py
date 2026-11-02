@@ -10,6 +10,7 @@ import sys
 import time
 
 ROOT = Path(__file__).resolve().parents[1]
+BUILD = Path(os.environ.get('QUESTDEV_BUILD_DIR',str(ROOT/'build/windows')))
 sys.path.insert(0, str(ROOT / 'assistant'))
 from sdk import QuestDevClient
 from verify_updates import close
@@ -34,9 +35,9 @@ def main():
         profile = folder / 'CyVR/QuestDev'
         if name != 'saved-again':
             profile.mkdir(parents=True)
-            (profile / 'settings.ini').write_text(f'log_lines={lines}\nlog_memory_mb={memory}\nfiles_side_by_side={int(split)}\nfiles_prepare_list={int(split)}\n', encoding='utf8')
+            (profile / 'settings.ini').write_text(f'log_lines={lines}\nlog_memory_mb={memory}\nfiles_side_by_side={int(split)}\nfiles_prepare_list={int(split)}\nlocale={"fr" if split else "en"}\ndensity={"compact" if split else "comfortable"}\n', encoding='utf8')
         env = dict(os.environ, LOCALAPPDATA=str(folder))
-        app = subprocess.Popen([str(ROOT / 'build/windows/CyVR_QuestDev.exe'), '--adb', str(ROOT / 'build/windows/fake_adb.exe'), '--log-settings'], env=env, creationflags=subprocess.CREATE_NO_WINDOW)
+        app = subprocess.Popen([str(BUILD / 'CyVR_QuestDev.exe'), '--adb', str(BUILD / 'fake_adb.exe'), '--log-settings'], env=env, creationflags=subprocess.CREATE_NO_WINDOW)
         connection = profile / 'assistant/connection.json'
         try:
             deadline = time.monotonic() + 25
@@ -59,6 +60,8 @@ def main():
                 assert retention['maxBytes'] == expected_memory * 1024 * 1024, retention
                 assert context['fileBrowser']['sideBySide'] is split
                 assert context['fileBrowser']['prepareList'] is split
+                assert context['appearance']['locale'] == ('fr' if split else 'en'), context['appearance']
+                assert context['appearance']['density'] == ('compact' if split else 'comfortable'), context['appearance']
             print(name + ': saved limits, bounds and file modes OK', flush=True)
         finally:
             close(app.pid)

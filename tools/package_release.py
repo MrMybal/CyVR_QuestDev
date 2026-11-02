@@ -5,13 +5,12 @@
 import argparse
 import hashlib
 import json
-import re
 from pathlib import Path, PurePosixPath
 import shutil
 import subprocess
-import sys
 from urllib.request import urlopen
 import zipfile
+from cyui_dependency import snapshot as snapshot_cyui, materialize, REVISION as CYUI_REVISION
 from setup_mirroring import validate as validate_mirroring, RUNTIME_FILES, SOURCES
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -84,14 +83,22 @@ def prepare_runtime(destination,cache):
     (destination/'runtime/portable.json').write_text(json.dumps({'python':PYTHON_VERSION,'origin':PYTHON_URL,'sha256':PYTHON_SHA256,'wheels':origins},indent=2),encoding='utf8')
 
 
-def package(output,cyui):
+def package(output,cyui,build=None):
+    build=build or ROOT/'build/windows'
+    if not (build/'UI-BUILD.json').is_file():raise RuntimeError('Rebuild with tools/build.py before packaging the modular UI')
+    metadata=json.loads((build/'UI-BUILD.json').read_text())
+    if metadata['cyuiRevision']!=CYUI_REVISION or metadata['sha256']!=digest(build/'CyVR_QuestDev.exe'):
+        raise RuntimeError('Rebuild the application with the pinned modular CyUI before packaging')
+    if not (cyui/'.cyui-source-manifest.json').exists():
+        cyui=materialize(cyui,ROOT/'build/dependencies'/('CyUI-'+CYUI_REVISION))
     validate_mirroring()
     if output.exists():raise RuntimeError('Use a new output directory; existing packages are preserved')
     output.mkdir(parents=True)
     tracked=[p for p in git('ls-files','-z').decode().split('\0') if p]
     commit=git('rev-parse','HEAD').decode().strip()
     product=output/f'CyVR_QuestDev-{VERSION}-Windows-x64';product.mkdir()
-    copy(ROOT/'build/windows/CyVR_QuestDev.exe',product/'CyVR_QuestDev.exe')
+    copy(build/'CyVR_QuestDev.exe',product/'CyVR_QuestDev.exe')
+    copy(build/'UI-BUILD.json',product/'UI-BUILD.json')
     for name in tracked:
         include=(name.startswith(('assistant/','updater/','plugins/','docs/','examples/','LICENCES/','licenses/')) and not name.startswith(('assistant/tests/','updater/tests/'))) or (name.startswith('assets/branding/') and Path(name).suffix in {'.png','.ico'}) or name in {'README.md','THIRD_PARTY.md','runtime/requirements.lock','VERSION'}
         if include:copy(ROOT/name,product/name)
@@ -123,20 +130,10 @@ def package(output,cyui):
     for name in tracked:copy(ROOT/name,source/'CyVR_QuestDev'/name)
     for name in [item['file'] for item in SOURCES]+['origins.json']:
         copy(ROOT/'runtime/mirror-sources'/name,source/'CyVR_QuestDev/runtime/mirror-sources'/name)
-    # Exact CyUI/ImGui source inputs needed to rebuild the statically linked host.
-    ui_files=[cyui/'CMakeLists.txt',cyui/'LICENSE',cyui/'README.md']
-    for directory in ['include','src']:
-        ui_files += [p for p in (cyui/directory).rglob('*') if p.is_file() and p.suffix in {'.h','.hpp','.cpp','.inc'}]
-    ui_files += [p for p in (cyui/'third_party/imgui').iterdir() if p.is_file() and p.suffix in {'.h','.cpp','.txt'}]
-    for name in ['imgui_impl_win32.h','imgui_impl_win32.cpp','imgui_impl_dx11.h','imgui_impl_dx11.cpp']:
-        ui_files.append(cyui/'third_party/imgui/backends'/name)
-    for file in ui_files:
-        target=source/'CyImgui_Interface'/file.relative_to(cyui);copy(file,target)
-        if file.name=='README.md':
-            text=re.sub(r'[A-Za-z]:[^\r\n`)]*CyImgui_Interface','path/to/CyImgui_Interface',target.read_text(encoding='utf8'))
-            target.write_text(text,encoding='utf8')
+    # Includes CodeEditor, Lexilla, Scintilla headers, generated syntax and all notices.
+    snapshot_cyui(cyui,source/'CyUI')
     (source/'RELEASE.json').write_text(json.dumps(manifest,indent=2),encoding='utf8')
-    (source/'BUILD.txt').write_text('Build Windows x64: ouvrir CyVR_QuestDev, puis exécuter .\\build.ps1 -Test.\nCyImgui_Interface et Dear ImGui sont fournis à côté du projet.\nVoir CyVR_QuestDev/README.md pour Visual Studio et les autres prérequis.\n',encoding='utf8')
+    (source/'BUILD.txt').write_text('Build Windows x64: ouvrir CyVR_QuestDev, puis exécuter .\\build.ps1 -Test.\nCyUI et ses dépendances exactes sont fournis à côté du projet.\nVoir CyVR_QuestDev/README.md pour Visual Studio et les autres prérequis.\n',encoding='utf8')
     # Hash every source input in the archive, including the linked UI dependency.
     files={p.relative_to(source).as_posix():digest(p) for p in sorted(source.rglob('*')) if p.is_file()}
     (source/'SOURCE-SHA256.json').write_text(json.dumps(files,indent=2),encoding='utf8')
@@ -148,5 +145,5 @@ def package(output,cyui):
 
 if __name__=='__main__':
     parser=argparse.ArgumentParser();parser.add_argument('--output',type=Path,required=True)
-    parser.add_argument('--cyui',type=Path,required=True);args=parser.parse_args()
-    package(args.output.resolve(),args.cyui.resolve())
+    parser.add_argument('--cyui',type=Path,required=True);parser.add_argument('--build-dir',type=Path,default=ROOT/'build/windows');args=parser.parse_args()
+    package(args.output.resolve(),args.cyui.resolve(),args.build_dir.resolve())
