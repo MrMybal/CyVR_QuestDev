@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include <cyui/Core.h>
 namespace quest { void registerUiTranslations(){cyui::registerTranslations("fr",{
+{"Help (F1)","Aide (F1)"},
+{"The local manual is missing. Use a complete QuestDev distribution.","Le manuel local est absent. Utilisez une distribution QuestDev complète."},
+{"The documentation could not be opened in the default browser.","La documentation n’a pas pu être ouverte dans le navigateur par défaut."},
 {"Settings","Réglages"},
 {"Device","Appareil"},
 {"AI assistant","Assistant IA"},

@@ -9,6 +9,7 @@ import subprocess
 import json
 import hashlib
 from cyui_dependency import materialize, REVISION, source_files
+from documentation import build_documentation
 
 
 def main():
@@ -20,6 +21,7 @@ def main():
     args.add_argument('--cyui', default=os.environ.get('CYUI_ROOT'))
     args.add_argument('--build-dir', type=Path, default=Path('build/windows'))
     options = args.parse_args()
+    build_documentation()
     cyui = Path(options.cyui).expanduser().resolve() if options.cyui else next(
         (parent / name for parent in root.parents for name in ('CyUI','CyImgui_Interface')
          if (parent / name / 'include/cyui/Core.h').is_file()),

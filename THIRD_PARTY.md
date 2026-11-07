@@ -8,6 +8,10 @@ Bibliothèque commune [CyUI 1.2](https://github.com/MrMybal/CyUI), révision `ff
 
 CodeEditor ajoute le backend MIT ImGuiColorTextEdit de Johan A. Goossens : [notice](licenses/CyUI-TextEditor.txt). Code compile les moteurs lexicaux Lexilla et utilise les en-têtes Scintilla et des propriétés SciTE, sous leur licence permissive de Neil Hodgson et contributeurs : [Lexilla](licenses/CyUI-Lexilla.txt), [Scintilla](licenses/CyUI-Scintilla.txt), [SciTE](licenses/CyUI-SciTE.txt). Leurs révisions et correctifs sont ceux du commit CyUI épinglé (`third_party/texteditor/VERSION.json` et `third_party/code-syntax.lock.json`). Aucune interface Scintilla ni application SciTE n’est liée.
 
+## CyDoc
+
+Le manuel local et sa copie web utilisent le lecteur officiel [CyDoc 0.1.0](https://github.com/MrMybal/CyDoc), révision `93f64486d61dae27a94ae1e5a05a20f6edd99914`, sous [MIT](licenses/CyDoc.txt). Le paquet compilateur et son origine sont conservés dans `.CyDocBuild/vendor/` ; seul le module image est activé. Le helper natif `third_party/cydoc/cydoc_link.hpp` provient de l’exemple d’intégration de cette même révision. Les scripts générés utilisent aussi marked, PrismJS et esbuild sous MIT ; leurs textes complets sont inclus dans `Documentation/DocData/licenses/` avec celui de CyDoc. Ces licences ne changent pas celle du contenu du manuel, qui reste GPL-3.0-only.
+
 ## CyVR_UI — projet associé
 
 [CyVR_UI](https://github.com/MrMybal/CyVR_UI) est distribué sous licence [MIT](https://github.com/MrMybal/CyVR_UI/blob/main/LICENSE).

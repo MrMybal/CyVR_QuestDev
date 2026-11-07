@@ -9,14 +9,18 @@ import json
 from pathlib import Path
 import re
 import struct
+import sys
 from urllib.parse import unquote, urlsplit
 
 SOURCE = Path(__file__).resolve().parent
 ROOT = SOURCE.parent
+sys.path.insert(0, str(ROOT / 'tools'))
+from documentation import build_documentation
+
 GUIDES = {
-    'installation': 'INSTALLATION.md', 'logs': 'LOGS.md', 'metrics': 'METRICS.md',
-    'files': 'FILES.md', 'mirroring': 'MIRRORING.md', 'plugins': 'PLUGINS.md',
-    'assistant': 'AI_MCP_SDK.md', 'updates': 'UPDATES.md',
+    'installation': 'quickstart', 'logs': 'console', 'metrics': 'metrics',
+    'files': 'files', 'mirroring': 'mirroring', 'plugins': 'plugins',
+    'assistant': 'assistant', 'updates': 'updates',
 }
 CHAPTERS = ('logs', 'metrics', 'device', 'files', 'plugins', 'assistant', 'setup', 'documentation')
 escape = lambda value: html.escape(str(value), quote=True)
@@ -59,6 +63,9 @@ def load_content():
 
 
 def build(output):
+    documentation = build_documentation()
+    manual = json.loads((documentation / 'DocData/manifest.json').read_text(encoding='utf-8'))
+    pages = {(page['locale'], page['id']): page for page in manual['pages']}
     output = output.resolve()
     if output == ROOT or ROOT.is_relative_to(output) or output.is_relative_to(SOURCE):
         raise ValueError('Choose a separate generated output directory')
@@ -98,7 +105,7 @@ def build(output):
     payload = json.dumps({'copy': {lang: data[lang] for lang in ('en', 'fr')}}, ensure_ascii=False).replace('<', '\\u003c')
     script = asset('showcase', '.js', ('"use strict";\nconst SHOWCASE = ' + payload + ';\n' + (SOURCE / 'main.js').read_text(encoding='utf-8')).encode('utf-8'))
 
-    def render(language, guides=False):
+    def render(language):
         def raw(key):
             return escape(data[language][key])
 
@@ -109,7 +116,8 @@ def build(output):
             return f'<a class="{cls}" href="{escape(href)}" {attrs}>{text("span", key)}</a>'
 
         def guide(name, key):
-            return link(f'./guides/docs/{GUIDES[name]}', key, 'text-link')
+            page = GUIDES[name]
+            return link(f'./manual/Documentation.html#/{language}/{page}', key, 'text-link', f'data-doc="{page}"')
 
         def shot(name, eager=False):
             item = media[name]
@@ -132,18 +140,12 @@ def build(output):
         links = data['links']
         head = (f'<!doctype html><html lang="{language}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
                 '<meta name="color-scheme" content="dark"><meta name="theme-color" content="#111318">'
-                f'<title>{raw("docs.indexTitle" if guides else "meta.title")}</title><meta name="description" content="{raw("meta.description")}">'
+                f'<title>{raw("meta.title")}</title><meta name="description" content="{raw("meta.description")}">'
                 f'<meta property="og:title" content="{raw("meta.title")}"><meta property="og:description" content="{raw("meta.description")}">'
-                f'<link rel="icon" href="{logo}"><link rel="stylesheet" href="{css}"><script src="{script}" defer></script></head><body' + (' data-guide-index="true"' if guides else '') + '>')
-        if guides:
-            result = head + link('#main', 'skip', 'skip') + '<header class="site-header"><div class="wrap header-inner"><strong>CyVR QuestDev</strong>' + lang_buttons + '</div></header>'
-            result += '<main id="main" class="wrap guide-index">' + text('h1', 'docs.indexTitle') + text('p', 'docs.format') + text('p', 'docs.body')
-            result += '<div class="guide-grid">' + ''.join(f'<a class="guide-card" href="./docs/{file}">{text("strong", "docs." + name)}{text("span", "docs.open")}</a>' for name, file in GUIDES.items()) + '</div>'
-            result += link('../index.html?lang=' + language + '#documentation', 'docs.back', 'button', 'data-back') + '</main></body></html>'
-            return result.replace('href="./assets/', 'href="../assets/').replace('src="./assets/', 'src="../assets/')
+                f'<link rel="icon" href="{logo}"><link rel="stylesheet" href="{css}"><script src="{script}" defer></script></head><body>')
         result = head + link('#main', 'skip', 'skip')
         result += f'<header class="site-header"><div class="wrap header-inner"><a class="brand" href="#main"><img src="{logo}" width="30" height="30" alt=""><span>CyVR QuestDev</span></a>'
-        result += f'<nav id="primary-nav" aria-label="{raw("nav.features")}" data-i18n-label="nav.features">' + link('#logs', 'nav.features') + link('./guides/index.html?lang=' + language, 'nav.docs', attrs='data-guide-index-link') + link('#download', 'nav.download') + '</nav>'
+        result += f'<nav id="primary-nav" aria-label="{raw("nav.features")}" data-i18n-label="nav.features">' + link('#logs', 'nav.features') + link('./manual/Documentation.html#/' + language + '/overview', 'nav.docs', attrs='data-doc="overview"') + link('#download', 'nav.download') + '</nav>'
         result += '<div class="header-actions">' + link(links['repository'], 'nav.github', 'github-link') + lang_buttons
         result += f'<button class="menu-button" type="button" aria-controls="primary-nav" aria-expanded="false" aria-label="{raw("nav.menu")}" data-i18n-label="nav.menu"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button></div></div></header>'
         result += '<main id="main"><section class="hero wrap" aria-labelledby="hero-title"><div class="hero-copy">' + text('p', 'hero.status', 'class="status"')
@@ -174,25 +176,22 @@ def build(output):
         for name, image in [('logs', 'retention'), ('updates', 'updates')]:
             result += '<article>' + text('h3', f'setup.{name}.title') + text('p', f'setup.{name}.body') + shot(image) + '</article>'
         result += '</div>' + guide('updates', 'setup.guide') + '</section>'
-        result += '<section id="documentation" class="section tinted" aria-labelledby="docs-title"><div class="wrap documentation">' + heading('docs') + text('p', 'docs.body') + link('./guides/index.html?lang=' + language, 'docs.action', 'button', 'data-guide-index-link') + '</div></section>'
+        result += '<section id="documentation" class="section tinted" aria-labelledby="docs-title"><div class="wrap documentation">' + heading('docs') + text('p', 'docs.body') + link('./manual/Documentation.html#/' + language + '/overview', 'docs.action', 'button', 'data-doc="overview"') + '</div></section>'
         result += '<section class="section wrap faq" aria-labelledby="faq-title">' + text('h2', 'faq.title', 'id="faq-title"') + '<div>' + ''.join('<details><summary>' + text('span', f'faq.q{i}') + '</summary>' + text('p', f'faq.a{i}') + '</details>' for i in (1, 2, 3)) + '</div></section>'
         result += '<section id="download" class="section wrap download" aria-labelledby="download-title">' + heading('download') + text('p', 'download.body') + '<div class="actions">' + link(links['installer'], 'download.installer', 'button primary') + link(links['portable'], 'download.portable', 'button') + '</div>' + link(links['release'], 'download.release', 'text-link') + text('p', 'download.note', 'class="fineprint"') + '</section></main>'
-        result += '<footer class="wrap site-footer"><div><strong>CyVR QuestDev</strong>' + text('p', 'footer.copyright', 'class="fineprint"') + text('p', 'footer.license', 'class="fineprint"') + '</div><div class="footer-links">' + link('./guides/index.html?lang=' + language, 'nav.docs', attrs='data-guide-index-link') + link(links['repository'], 'nav.github') + '<a href="./LICENSE.txt">GPL-3.0-only</a>' + link('./THIRD_PARTY.md', 'footer.notices') + '</div></footer>'
+        result += '<footer class="wrap site-footer"><div><strong>CyVR QuestDev</strong>' + text('p', 'footer.copyright', 'class="fineprint"') + text('p', 'footer.license', 'class="fineprint"') + '</div><div class="footer-links">' + link('./manual/Documentation.html#/' + language + '/overview', 'nav.docs', attrs='data-doc="overview"') + link(links['repository'], 'nav.github') + '<a href="./LICENSE.txt">GPL-3.0-only</a>' + link('./THIRD_PARTY.md', 'footer.notices') + '</div></footer>'
         result += '<dialog id="image-viewer" aria-labelledby="viewer-caption"><div class="viewer-controls"><button type="button" data-viewer-prev aria-label="' + raw('viewer.previous') + '" data-i18n-label="viewer.previous">←</button><button type="button" data-viewer-next aria-label="' + raw('viewer.next') + '" data-i18n-label="viewer.next">→</button><button type="button" data-viewer-close>' + text('span', 'viewer.close') + ' ×</button></div><img id="viewer-image" alt=""><p id="viewer-caption" aria-live="polite"></p>' + text('p', 'viewer.help', 'class="fineprint"') + '</dialog></body></html>'
         return result
 
     write('index.html', render('en'))
     write('fr.html', render('fr'))
-    write('guides/index.html', render('en', True))
-    # Preserve the actual documentation format and its relative image links.
-    for filename in GUIDES.values():
-        content = (ROOT / 'docs' / filename).read_text(encoding='utf-8')
-        # The developer's packaging guide belongs to the source repository.
-        # Keep user guides local without dragging its build/audit tree into the site.
-        content = content.replace('](RELEASE.md)', '](' + data['links']['repository'] + '/blob/main/docs/RELEASE.md)')
-        write('guides/docs/' + filename, content)
-    for image in (ROOT / 'docs/images').glob('*.png'):
-        write('guides/docs/images/' + image.name, image.read_bytes())
+    # Copy the entire official export, unchanged, as shipped beside the app.
+    for path in sorted(documentation.rglob('*')):
+        if path.is_file():
+            write('manual/' + path.relative_to(documentation).as_posix(), path.read_bytes())
+    write('guides/index.html', '''<!doctype html><html lang="en"><head><meta charset="utf-8"><title>QuestDev manual</title></head>
+<body><p><a href="../manual/Documentation.html#/en/overview">English manual</a> · <a href="../manual/Documentation.html#/fr/overview">Manuel français</a></p>
+<script>location.replace('../manual/Documentation.html#/'+(new URLSearchParams(location.search).get('lang')==='fr'?'fr':'en')+'/overview');</script></body></html>''')
     for name in ('LICENSE', 'COPYRIGHT'):
         write(name, (ROOT / name).read_bytes())
         write(name + '.txt', (ROOT / name).read_bytes())
@@ -224,8 +223,15 @@ def build(output):
             target = ((output / name).parent / unquote(parts.path)).resolve() if parts.path else output / name
             if not target.is_relative_to(output) or not target.is_file():
                 raise ValueError(f'Broken local link in {name}: {reference}')
-            if parts.fragment and target.suffix == '.html' and unquote(parts.fragment) not in documents[target.relative_to(output).as_posix()].ids:
-                raise ValueError('Broken anchor: ' + reference)
+            if parts.fragment and target.suffix == '.html':
+                if target == output / 'manual/Documentation.html':
+                    route = unquote(parts.fragment).split('?', 1)[0].strip('/').split('/')
+                    page = pages.get(tuple(route[:2]))
+                    anchors = {heading['id'] for heading in page['headings']} if page else set()
+                    if not page or (len(route) > 2 and route[2] not in anchors):
+                        raise ValueError('Broken CyDoc route: ' + reference)
+                elif unquote(parts.fragment) not in documents[target.relative_to(output).as_posix()].ids:
+                    raise ValueError('Broken anchor: ' + reference)
             links_checked += 1
     for name in files:
         if not name.endswith('.md'):

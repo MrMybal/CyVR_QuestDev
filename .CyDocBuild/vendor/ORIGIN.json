@@ -1,0 +1,10 @@
+{
+  "name": "CyDoc",
+  "version": "0.1.0",
+  "repository": "https://github.com/MrMybal/CyDoc",
+  "revision": "93f64486d61dae27a94ae1e5a05a20f6edd99914",
+  "archive": "cydoc-0.1.0.tgz",
+  "sha256": "942cbc366b65336f24451a5cd91770587595457938486ac5153d7e1da41effc0",
+  "license": "MIT",
+  "build": "Official npm run build and npm pack from a clean Git snapshot; optional mesh support is not used."
+}

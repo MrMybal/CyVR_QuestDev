@@ -1,0 +1,23 @@
+{
+  "name": "CyVR QuestDev",
+  "version": "0.9.0-alpha.1",
+  "defaultLocale": "en",
+  "locales": [
+    {
+      "code": "en",
+      "label": "English"
+    },
+    {
+      "code": "fr",
+      "label": "Français"
+    }
+  ],
+  "homePage": "overview",
+  "content": "manual",
+  "assets": ".cache/assets",
+  "logo": "assets/questdev-logo.png",
+  "out": "../Documentation",
+  "modules": [
+    "image"
+  ]
+}

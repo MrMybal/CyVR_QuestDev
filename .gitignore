@@ -1,6 +1,11 @@
 /build/
 /captures/
 /dist/
+/Documentation/
+/.CyDocBuild/node_modules/
+/.CyDocBuild/.cache/
+/.CyDocBuild/.toolchain/
+/.CyDocBuild/internal/
 /assets/branding/*.prompt.txt
 *.log
 *.jsonl

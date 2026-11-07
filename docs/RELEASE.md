@@ -6,6 +6,8 @@ L’archive **Source** comprend le projet et les sources CyUI / Dear ImGui néce
 
 Pour l’architecture modulaire, reconstruire avec le commit CyUI épinglé et conserver `UI-BUILD.json`. Le packager inclut également TextEditor, Lexilla, les en-têtes Scintilla, les données générées et leurs notices. Il vérifie le SHA-256 de l’exécutable reconstruit. Voir [CYUI_MIGRATION.md](CYUI_MIGRATION.md).
 
+Les sources actuelles ajoutent le manuel CyDoc EN/FR et l’aide contextuelle F1. Installer Node.js 22+ pour la génération ; `tools/build.py` et le packager appellent `tools/documentation.py` avec le compilateur épinglé dans `.CyDocBuild/`. Le dossier généré `Documentation/` entier est copié dans les archives Windows et Source, puis dans l’installateur. Il contient les scripts, images, données et licences nécessaires à la lecture locale, sans runtime Node.js. Les binaires 0.9.0 déjà publiés précèdent cet ajout. Voir les [instructions de maintenance](../.CyDocBuild/README.md).
+
 Les versions 0.7+ proposent aussi [la mise à jour depuis l’application](UPDATES.md).
 
 ## Produire les archives

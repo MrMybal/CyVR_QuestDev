@@ -1,8 +1,8 @@
 <table width="100%">
   <tr>
     <td width="300" align="left" valign="top">
-      <a href="docs/INSTALLATION.md">Guide d’installation</a><br>
-      <a href="docs/LOGS.md">Guide du journal</a><br>
+      <a href="https://mrmybal.github.io/CyVR_QuestDev/manual/Documentation.html#/fr/quickstart">Manuel (FR / EN)</a><br>
+      <a href="https://mrmybal.github.io/CyVR_QuestDev/manual/Documentation.html#/fr/console">Guide du journal</a><br>
       <a href="https://mrmybal.github.io/CyVR_QuestDev/?lang=fr">Vitrine (EN / FR)</a><br>
       <a href="https://github.com/MrMybal/CyVR_QuestDev">Dépôt</a><br><br>
       <sub>README</sub><br>
@@ -47,17 +47,17 @@ Les neuf pages possèdent leur propre navigation : **Console, Applications, Rég
 - **IA, MCP et SDK** : discussion Markdown, choix du modèle, réponse progressive, annulation et contexte inspectable. Codex peut appeler les outils natifs QuestDev ; les autres profils intégrés proposent actuellement du texte contextualisé. Les clients MCP externes et le SDK Python accèdent au catalogue d’opérations.
 - **Apparence et mises à jour** : cinq thèmes, deux densités, préférence EN/FR sauvegardée pour les vues migrées et mise à l’échelle DPI. Les mises à jour GitHub proposent des canaux Alpha/stable, un téléchargement vérifié, le redémarrage et la sauvegarde/restauration.
 
-La traduction de l’interface reste partielle. Les guides détaillés sont actuellement en français ; les commandes, packages, chemins et journaux capturés conservent leur contenu original.
+La traduction de l’interface reste partielle. Le manuel CyDoc est complet en français et en anglais ; les commandes, packages, chemins et journaux capturés conservent leur contenu original.
 
 ## Présentation de l’application
 
-Découvrez la [vitrine complète en français et en anglais](https://mrmybal.github.io/CyVR_QuestDev/?lang=fr) : **14 captures réelles de l’application** en mode démonstration, des chapitres consacrés aux principaux outils, les différentes vues de la console, une visionneuse d’images dans la page, les guides locaux et les liens de téléchargement de l’Alpha Windows. Les textes, légendes et commandes de la vitrine sont traduits dans les deux langues.
+Découvrez la [vitrine complète en français et en anglais](https://mrmybal.github.io/CyVR_QuestDev/?lang=fr) : **14 captures réelles de l’application** en mode démonstration, des chapitres consacrés aux principaux outils, les différentes vues de la console, une visionneuse d’images dans la page, le manuel CyDoc et les liens de téléchargement de l’Alpha Windows. Les textes, légendes et commandes de la vitrine sont traduits dans les deux langues.
 
 [![Vitrine française de QuestDev avec la console de l’application — données de démonstration](docs/images/showcase-fr.jpg)](https://mrmybal.github.io/CyVR_QuestDev/?lang=fr)
 
 **Ouvrir en ligne : [Français](https://mrmybal.github.io/CyVR_QuestDev/?lang=fr) · [English](https://mrmybal.github.io/CyVR_QuestDev/).**
 
-Depuis la racine du projet, générez et prévisualisez la vitrine avec Python 3.11+ :
+Depuis la racine du projet, générez et prévisualisez la vitrine avec Python 3.11+ et Node.js 22+ :
 
 ```powershell
 python website/build.py
@@ -68,6 +68,12 @@ Pour un aperçu local, ouvrez `http://127.0.0.1:50870/questdev/?lang=fr` en fran
 
 ---
 
+## Manuel utilisateur
+
+Consultez le manuel complet en [français](https://mrmybal.github.io/CyVR_QuestDev/manual/Documentation.html#/fr/overview) ou en [anglais](https://mrmybal.github.io/CyVR_QuestDev/manual/Documentation.html#/en/overview). Les compilations de ces sources fournissent le même lecteur localement : **Aide / F1** ouvre le chapitre de l’outil actif dans le navigateur par défaut, avec arborescence, recherche, images, favoris et notes. Conservez le dossier `Documentation/` entier à côté de l’EXE. La lecture ne nécessite ni Node.js ni serveur.
+
+Les binaires Alpha 0.9.0 déjà publiés précèdent cette intégration de l’aide ; leurs liens de téléchargement ci-dessus restent inchangés. Les [instructions de génération](.CyDocBuild/README.md) expliquent la maintenance du manuel.
+
 ## Installation
 
 **Version disponible : Windows 10/11 x64.** L’application embarque Python, CyToolsCore/MCP, les plugins et le moteur de mirroring scrcpy. Les Android SDK Platform-Tools (**ADB**), les CLI/comptes des fournisseurs IA et les applications installées sur le Quest restent externes.
@@ -77,16 +83,16 @@ Pour un aperçu local, ouvrez `http://127.0.0.1:50870/questdev/?lang=fr` en fran
 3. Installer les [Android SDK Platform-Tools officiels](https://developer.android.com/tools/releases/platform-tools), activer le mode développeur du Quest, le brancher et accepter le débogage USB dans le casque. Choisir `adb.exe` dans **Réglages** si sa détection échoue.
 4. Sélectionner le casque. Pour enregistrer les données OVR, installer OVR Metrics Tool sur le Quest et laisser tourner l’application à mesurer. Connecter explicitement un fournisseur IA pour utiliser l’assistant.
 
-L’installateur n’est pas signé. Les [fichiers de release et empreintes SHA-256](https://github.com/MrMybal/CyVR_QuestDev/releases/tag/v0.9.0-alpha.1) comprennent les sources correspondantes. L’audio du mirroring nécessite Android 13+ et peut être indisponible selon l’app. Consulter les guides d’[installation](docs/INSTALLATION.md) et de [mirroring](docs/MIRRORING.md).
+L’installateur n’est pas signé. Les [fichiers de release et empreintes SHA-256](https://github.com/MrMybal/CyVR_QuestDev/releases/tag/v0.9.0-alpha.1) comprennent les sources correspondantes. L’audio du mirroring nécessite Android 13+ et peut être indisponible selon l’app. Consulter les guides d’[installation](https://mrmybal.github.io/CyVR_QuestDev/manual/Documentation.html#/fr/quickstart) et de [mirroring](https://mrmybal.github.io/CyVR_QuestDev/manual/Documentation.html#/fr/mirroring).
 
-Pour une installation existante, ouvrir **Réglages → Mises à jour GitHub** et choisir le canal Alpha pour recevoir les préversions. Le [guide des mises à jour](docs/UPDATES.md) explique l’installation et la restauration.
+Pour une installation existante, ouvrir **Réglages → Mises à jour GitHub** et choisir le canal Alpha pour recevoir les préversions. Le [guide des mises à jour](https://mrmybal.github.io/CyVR_QuestDev/manual/Documentation.html#/fr/updates) explique l’installation et la restauration.
 
 ## Sources, compilation et bibliothèques nécessaires
 
 <details>
 <summary>Compiler QuestDev depuis les sources sur Windows</summary>
 
-Utiliser Visual Studio 2022 avec les outils C++17/C++20, CMake 3.20+, Ninja, Git et Python 3.11+. Le programme natif utilise C++17 ; l’éditeur de texte commun et son adaptateur utilisent C++20.
+Utiliser Visual Studio 2022 avec les outils C++17/C++20, CMake 3.20+, Ninja, Git, Python 3.11+ et Node.js 22+ (uniquement pour générer le manuel). Le programme natif utilise C++17 ; l’éditeur de texte commun et son adaptateur utilisent C++20.
 
 ```powershell
 git clone https://github.com/MrMybal/CyVR_QuestDev.git
@@ -124,6 +130,7 @@ L’exécutable par défaut est `build/windows/CyVR_QuestDev.exe`. Une compilati
 | Bibliothèque · sources | Licence · texte | Utilisation / périmètre |
 | --- | --- | --- |
 | [CyUI 1.2.0](https://github.com/MrMybal/CyUI) | [MIT](licenses/CyUI.txt) · [texte amont épinglé](https://github.com/MrMybal/CyUI/blob/ff023e646c6a3038b3dfbfd53f6d2b4a2f5955e3/LICENSE) | Interface native modulaire ; les modules sélectionnés sont liés à QuestDev. |
+| [CyDoc 0.1.0](https://github.com/MrMybal/CyDoc) | [MIT](licenses/CyDoc.txt) | Lecteur du manuel local et web ; compilateur épinglé dans `.CyDocBuild/vendor/ORIGIN.json`. |
 | [Dear ImGui](https://github.com/ocornut/imgui) | [MIT](licenses/ImGui.txt) | Widgets natifs et backends Win32/DX11 fournis par CyUI. |
 | [ImGuiColorTextEdit](https://github.com/goossens/ImGuiColorTextEdit) | [MIT](licenses/CyUI-TextEditor.txt) | Éditeur RAW, ADB et JSON en lecture seule, via CyUI CodeEditor. |
 | [Lexilla](https://github.com/ScintillaOrg/lexilla), [Scintilla](https://www.scintilla.org/ScintillaDownload.html), [SciTE](https://www.scintilla.org/SciTEDownload.html) | Notices permissives [Lexilla](licenses/CyUI-Lexilla.txt) · [Scintilla](licenses/CyUI-Scintilla.txt) · [SciTE](licenses/CyUI-SciTE.txt) | Moteurs syntaxiques, en-têtes et propriétés de langages de CyUI Code ; aucune application Scintilla ou SciTE n’est liée. |
@@ -144,6 +151,6 @@ Ce tableau indexe les principaux composants. Conserver les [notices tierces comp
 
 - [Présentation de l’application](https://mrmybal.github.io/CyVR_QuestDev/?lang=fr) · [Génération locale et déploiement](website/README.md).
 - [Notes de version et limites](docs/releases/v0.9.0-alpha.1.fr.md) · [Téléchargements](https://github.com/MrMybal/CyVR_QuestDev/releases) · [Suivi des problèmes](https://github.com/MrMybal/CyVR_QuestDev/issues).
-- Guides : [journaux](docs/LOGS.md), [fichiers](docs/FILES.md), [métriques](docs/METRICS.md), [mirroring](docs/MIRRORING.md), [plugins](docs/PLUGINS.md) et [IA/MCP/SDK](docs/AI_MCP_SDK.md).
+- Guides : [journaux](https://mrmybal.github.io/CyVR_QuestDev/manual/Documentation.html#/fr/console), [fichiers](https://mrmybal.github.io/CyVR_QuestDev/manual/Documentation.html#/fr/files), [métriques](https://mrmybal.github.io/CyVR_QuestDev/manual/Documentation.html#/fr/metrics), [mirroring](https://mrmybal.github.io/CyVR_QuestDev/manual/Documentation.html#/fr/mirroring), [plugins](https://mrmybal.github.io/CyVR_QuestDev/manual/Documentation.html#/fr/plugins) et [IA/MCP/SDK](https://mrmybal.github.io/CyVR_QuestDev/manual/Documentation.html#/fr/automation).
 - [Exemple de SDK Python](examples/list_errors.py) · [Dépôt des sources](https://github.com/MrMybal/CyVR_QuestDev).
 - [CyUI](https://github.com/MrMybal/CyUI) · [CyToolsCore](https://github.com/MrMybal/CyToolsCore) · [Projet associé : CyVR_UI, MIT](https://github.com/MrMybal/CyVR_UI).

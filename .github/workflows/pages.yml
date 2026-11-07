@@ -6,6 +6,8 @@ on:
     paths:
       - .github/workflows/pages.yml
       - website/**
+      - .CyDocBuild/**
+      - tools/documentation.py
       - docs/**
       - assets/branding/**
       - examples/download_file.py
@@ -38,6 +40,12 @@ jobs:
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.13'
+      - name: Set up the documentation compiler
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+      - name: Install the pinned documentation dependencies
+        run: npm ci --prefix .CyDocBuild --no-audit --no-fund
       - name: Build and validate the bilingual showcase
         run: python website/build.py
       - name: Upload the generated static site

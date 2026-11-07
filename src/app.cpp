@@ -13,6 +13,7 @@
 #include "quest/mirroring.hpp"
 #include "quest/resources.h"
 #include "quest/version.hpp"
+#include "quest/documentation.hpp"
 #include <cyui/Core.h>
 #include <cyui/modules/DocumentViews.h>
 #include <cyui/modules/Images.h>
@@ -531,14 +532,24 @@ struct App::Impl {
         auto p=fileDialog(false,L"Application Android (*.apk)\0*.apk\0\0",L"apk");
         if(!p.empty()){backend->action("install",narrow(p));status="Installation de l’APK…";}
     }
+    void openHelp() {
+        auto manual=appRoot()/L"Documentation/Documentation.html";
+        if(!isFile(manual.wstring()))manual=productRoot()/L"Documentation/Documentation.html";
+        if(!isFile(manual.wstring())){status=cyui::tr("The local manual is missing. Use a complete QuestDev distribution.");return;}
+        try {
+            const auto url=widen(documentationUrl(manual,cyui::locale(),page));
+            if(reinterpret_cast<INT_PTR>(ShellExecuteW(nullptr,L"open",url.c_str(),nullptr,nullptr,SW_SHOWNORMAL))>32)return;
+        } catch(const std::exception&) {}
+        status=cyui::tr("The documentation could not be opened in the default browser.");
+    }
     void topbar() {
         if(cyui::beginTopBar("##top",cyui::dp(62))) {
             if(appLogo->texture()){ImGui::Image(static_cast<ImTextureID>(appLogo->texture()),cyui::dp(44,44));ImGui::SameLine(0,cyui::dp(10));}
             ImGui::BeginGroup();cyui::heading(cyui::tr("CyVR QuestDev").c_str(),2);cyui::textFaint("OUTILS DÉVELOPPEUR / META QUEST");ImGui::EndGroup();
             ImGui::SameLine(0,cyui::dp(16));
             const char* pages[]={"Console","Applications","Settings","Device","ADB","Plugins","AI assistant","Files","Metrics"};cyui::segmented("##pages",pages,9,&page,cyui::dp(740));
-            ImGui::SameLine();cyui::alignRight(cyui::dp(300));
-            ImGui::SetNextItemWidth(cyui::dp(255));
+            ImGui::SameLine();cyui::alignRight(cyui::dp(330));
+            ImGui::SetNextItemWidth(cyui::dp(245));
             std::string label=serial.empty()?"Sélectionner un casque":serial;
             for(const auto& d:devices)if(d.serial==serial)label=(d.model.empty()?d.serial:d.model)+" · "+d.state;
             if(ImGui::BeginCombo("##devices",label.c_str())) {
@@ -550,8 +561,9 @@ struct App::Impl {
                 if(devices.empty())cyui::textDim("Aucun casque USB ou Wi-Fi.");
                 ImGui::EndCombo();
             }
-            ImGui::SameLine();cyui::ScopedDisabled disabled(options.demo);
-            if(cyui::iconButton(cyui::icon::refresh,"Actualiser les appareils (F5)"))backend->refresh();
+            ImGui::SameLine();{cyui::ScopedDisabled disabled(options.demo);
+                if(cyui::iconButton(cyui::icon::refresh,"Actualiser les appareils (F5)"))backend->refresh();}
+            ImGui::SameLine();if(cyui::iconButton(cyui::icon::help,cyui::tr("Help (F1)").c_str()))openHelp();
         }cyui::endTopBar();
     }
     void statusbar() {
@@ -1193,6 +1205,7 @@ struct App::Impl {
     }
     void frame() {
         tick();rebuildCounts();
+        if(ImGui::IsKeyPressed(ImGuiKey_F1,false))openHelp();
         if(!ImGui::GetIO().WantTextInput&&!ImGui::IsAnyItemActive()&&!(page==0&&((view.rawMode&&view.rawEditor.focused())||(compare&&second.rawMode&&second.rawEditor.focused())))) {
             if(ImGui::IsKeyPressed(ImGuiKey_F5)&&backend)backend->refresh();
             if(page==0 && ImGui::IsKeyPressed(ImGuiKey_Space))pause(view);

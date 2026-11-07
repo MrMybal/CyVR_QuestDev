@@ -12,6 +12,7 @@ from urllib.request import urlopen
 import zipfile
 from cyui_dependency import snapshot as snapshot_cyui, materialize, REVISION as CYUI_REVISION
 from setup_mirroring import validate as validate_mirroring, RUNTIME_FILES, SOURCES
+from documentation import build_documentation
 
 ROOT=Path(__file__).resolve().parents[1]
 VERSION=(ROOT/'VERSION').read_text(encoding='ascii').strip()
@@ -84,6 +85,7 @@ def prepare_runtime(destination,cache):
 
 
 def package(output,cyui,build=None):
+    documentation=build_documentation()
     build=build or ROOT/'build/windows'
     if not (build/'UI-BUILD.json').is_file():raise RuntimeError('Rebuild with tools/build.py before packaging the modular UI')
     metadata=json.loads((build/'UI-BUILD.json').read_text())
@@ -103,6 +105,8 @@ def package(output,cyui,build=None):
         include=(name.startswith(('assistant/','updater/','plugins/','docs/','examples/','website/','LICENCES/','licenses/')) and not name.startswith(('assistant/tests/','updater/tests/'))) or (name.startswith('assets/branding/') and Path(name).suffix in {'.png','.ico'}) or name in {'README.md','README.fr.md','LICENSE','COPYRIGHT','THIRD_PARTY.md','runtime/requirements.lock','VERSION'}
         if include:copy(ROOT/name,product/name)
     for source,target in [('LICENSE','LICENSE.txt'),('COPYRIGHT','COPYRIGHT.txt')]:copy(ROOT/source,product/target)
+    for file in documentation.rglob('*'):
+        if file.is_file():copy(file,product/'Documentation'/file.relative_to(documentation))
     prepare_runtime(product,ROOT/'build/release-cache')
     for name in sorted(RUNTIME_FILES|{'origins.json'}):copy(ROOT/'runtime/mirror'/name,product/'runtime/mirror'/name)
     (product/'DEMARRER.txt').write_text(
@@ -115,6 +119,7 @@ def package(output,cyui,build=None):
         'OVR Metrics / CyInsightOVR : installer leurs distributions officielles sur le casque.\n\n'
         'Mirroring : Appareil → Mirroring vidéo / audio → Démarrer le mirroring. Moteur scrcpy inclus.\n'
         'Réglages vidéo/audio, F11 plein écran, enregistrement MKV facultatif.\n\n'
+        'Manuel bilingue : Aide / F1, ou Documentation/Documentation.html. Conserver le dossier entier.\n\n'
         'Mises à jour : Réglages → Mises à jour GitHub. Voir docs/UPDATES.md.\n\n'
         'Version Alpha : voir docs/VALIDATION.md et docs/METRICS.md pour les limites connues.\n'
         'Code source correspondant : archive Source de la même release. Licence GPLv3, notices tierces incluses.\n',encoding='utf8')
@@ -128,6 +133,8 @@ def package(output,cyui,build=None):
     (product/'UPDATE-MANIFEST.json').write_text(json.dumps({'version':VERSION,'platform':'Windows x64','files':update_files},indent=2),encoding='utf8')
     source=output/f'CyVR_QuestDev-{VERSION}-Source';source.mkdir()
     for name in tracked:copy(ROOT/name,source/'CyVR_QuestDev'/name)
+    for file in documentation.rglob('*'):
+        if file.is_file():copy(file,source/'CyVR_QuestDev/Documentation'/file.relative_to(documentation))
     for name in [item['file'] for item in SOURCES]+['origins.json']:
         copy(ROOT/'runtime/mirror-sources'/name,source/'CyVR_QuestDev/runtime/mirror-sources'/name)
     # Includes CodeEditor, Lexilla, Scintilla headers, generated syntax and all notices.

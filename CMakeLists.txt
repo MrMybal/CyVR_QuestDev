@@ -25,8 +25,8 @@ endif()
 enable_language(RC)
 configure_file(src/resources.rc.in "${CMAKE_BINARY_DIR}/quest_resources.rc" @ONLY)
 include(cmake/CyUI.cmake)
-add_library(quest_core STATIC src/core.cpp)
-target_include_directories(quest_core PUBLIC include)
+add_library(quest_core STATIC src/core.cpp src/documentation.cpp)
+target_include_directories(quest_core PUBLIC include PRIVATE third_party)
 add_library(quest_backend STATIC src/backend.cpp src/plugins.cpp src/metrics_plugins.cpp src/files.cpp src/transfers.cpp src/metrics_data.cpp src/metrics_capture.cpp src/mirroring.cpp)
 target_link_libraries(quest_backend PUBLIC quest_core user32)
 target_include_directories(quest_backend PUBLIC include third_party "${CMAKE_BINARY_DIR}/generated")
@@ -46,6 +46,14 @@ add_executable(CyVR_QuestDev WIN32 src/main.cpp src/app.cpp src/ui_locale.cpp sr
 target_include_directories(CyVR_QuestDev PRIVATE "${IMGUI_DIR}/backends" third_party)
 target_link_libraries(CyVR_QuestDev PRIVATE quest_backend quest_text_views quest_plot_views CyUI::Core CyUI::Plots CyUI::Images CyUI::DocumentViews d3d11 dxgi d3dcompiler dwmapi shell32 comdlg32 ole32 windowscodecs)
 add_custom_command(TARGET CyVR_QuestDev POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/plugins" "$<TARGET_FILE_DIR:CyVR_QuestDev>/plugins")
+if(EXISTS "${CMAKE_SOURCE_DIR}/Documentation/Documentation.html")
+    add_custom_target(quest_documentation ALL
+        COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/Documentation" "$<TARGET_FILE_DIR:CyVR_QuestDev>/Documentation"
+        DEPENDS CyVR_QuestDev
+        COMMENT "Copy the complete QuestDev manual")
+else()
+    message(WARNING "Generate the manual with python tools/documentation.py before distributing QuestDev.")
+endif()
 set_property(TARGET CyVR_QuestDev APPEND PROPERTY LINK_DEPENDS
     "${CMAKE_SOURCE_DIR}/LICENSE" "${CMAKE_SOURCE_DIR}/COPYRIGHT" "${CMAKE_SOURCE_DIR}/THIRD_PARTY.md"
     "${CMAKE_SOURCE_DIR}/assets/branding/cyvr-questdev-logo-gradient.png"
@@ -67,6 +75,12 @@ if(MSVC)
 endif()
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(quest_documentation_tests tests/documentation_tests.cpp)
+    target_link_libraries(quest_documentation_tests PRIVATE quest_core)
+    if(MSVC)
+        target_compile_options(quest_documentation_tests PRIVATE /W4 /utf-8 /EHsc)
+    endif()
+    add_test(NAME quest_documentation_links COMMAND quest_documentation_tests)
     add_executable(quest_module_views_tests tests/module_views_tests.cpp src/ui_locale.cpp)
     target_link_libraries(quest_module_views_tests PRIVATE quest_plot_views CyUI::Images CyUI::DocumentViews)
     if(MSVC)

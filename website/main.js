@@ -3,7 +3,6 @@
 (() => {
   const $ = selector => document.querySelector(selector);
   const all = selector => [...document.querySelectorAll(selector)];
-  const isGuideIndex = document.body.dataset.guideIndex === 'true';
   let language;
   const copy = () => SHOWCASE.copy[language];
   const viewer = $('#image-viewer');
@@ -19,7 +18,7 @@
       history.replaceState(null, '', url);
     }
     document.documentElement.lang = language;
-    document.title = copy()[isGuideIndex ? 'docs.indexTitle' : 'meta.title'];
+    document.title = copy()['meta.title'];
     $('meta[name="description"]').content = copy()['meta.description'];
     $('meta[property="og:title"]').content = copy()['meta.title'];
     $('meta[property="og:description"]').content = copy()['meta.description'];
@@ -28,8 +27,7 @@
     all('[data-i18n-alt]').forEach(el => { el.alt = copy()[el.dataset.i18nAlt]; });
     all('[data-lang]').forEach(el => el.setAttribute('aria-pressed', String(el.dataset.lang === language)));
     all('[data-shot]').forEach(el => el.setAttribute('aria-label', `${copy()['viewer.open']}: ${copy()[`shot.${el.dataset.shot}.caption`]}`));
-    all('[data-guide-index-link]').forEach(el => { el.href = `./guides/index.html?lang=${language}`; });
-    if ($('[data-back]')) $('[data-back]').href = `../index.html?lang=${language}#documentation`;
+    all('[data-doc]').forEach(el => { el.href = `./manual/Documentation.html#/${language}/${el.dataset.doc}`; });
     if (viewer?.open) showImage(activeShot);
   }
 
