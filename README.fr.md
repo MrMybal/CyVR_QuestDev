@@ -3,7 +3,7 @@
     <td width="300" align="left" valign="top">
       <a href="docs/INSTALLATION.md">Guide d’installation</a><br>
       <a href="docs/LOGS.md">Guide du journal</a><br>
-      <a href="website/README.md">Vitrine (EN / FR)</a><br>
+      <a href="https://mrmybal.github.io/CyVR_QuestDev/?lang=fr">Vitrine (EN / FR)</a><br>
       <a href="https://github.com/MrMybal/CyVR_QuestDev">Dépôt</a><br><br>
       <sub>README</sub><br>
       <a href="README.md">English</a> · <a href="README.fr.md">Français</a>
@@ -51,9 +51,11 @@ La traduction de l’interface reste partielle. Les guides détaillés sont actu
 
 ## Présentation de l’application
 
-Découvrez la [vitrine complète en français et en anglais](website/README.md) : **14 captures réelles de l’application** en mode démonstration, des chapitres consacrés aux principaux outils, les différentes vues de la console, une visionneuse d’images dans la page, les guides locaux et les liens de téléchargement de l’Alpha Windows. Les textes, légendes et commandes de la vitrine sont traduits dans les deux langues.
+Découvrez la [vitrine complète en français et en anglais](https://mrmybal.github.io/CyVR_QuestDev/?lang=fr) : **14 captures réelles de l’application** en mode démonstration, des chapitres consacrés aux principaux outils, les différentes vues de la console, une visionneuse d’images dans la page, les guides locaux et les liens de téléchargement de l’Alpha Windows. Les textes, légendes et commandes de la vitrine sont traduits dans les deux langues.
 
-[![Vitrine française de QuestDev avec la console de l’application — données de démonstration](docs/images/showcase-fr.jpg)](website/README.md)
+[![Vitrine française de QuestDev avec la console de l’application — données de démonstration](docs/images/showcase-fr.jpg)](https://mrmybal.github.io/CyVR_QuestDev/?lang=fr)
+
+**Ouvrir en ligne : [Français](https://mrmybal.github.io/CyVR_QuestDev/?lang=fr) · [English](https://mrmybal.github.io/CyVR_QuestDev/).**
 
 Depuis la racine du projet, générez et prévisualisez la vitrine avec Python 3.11+ :
 
@@ -62,7 +64,7 @@ python website/build.py
 python website/preview.py
 ```
 
-Ouvrez `http://127.0.0.1:50870/questdev/?lang=fr` pour le français ou `http://127.0.0.1:50870/questdev/` pour l’anglais. Le dossier généré `dist/website/` contient une vitrine statique complète : conservez-le entier pour ouvrir `index.html` localement. Le [guide de la vitrine](website/README.md) détaille sa génération, sa prévisualisation et le format de la documentation. Cet aperçu fonctionne sur votre ordinateur ; aucun site public n’est hébergé à ce stade.
+Pour un aperçu local, ouvrez `http://127.0.0.1:50870/questdev/?lang=fr` en français ou retirez `?lang=fr` pour l’anglais. Le dossier généré `dist/website/` contient une vitrine statique complète : conservez-le entier pour ouvrir `index.html` localement. Le [guide de la vitrine](website/README.md) détaille sa génération, sa prévisualisation, son déploiement sur GitHub Pages et le format de la documentation.
 
 ---
 
@@ -140,7 +142,7 @@ Ce tableau indexe les principaux composants. Conserver les [notices tierces comp
 
 ## Références et liens
 
-- [Présentation de l’application et aperçu local](website/README.md).
+- [Présentation de l’application](https://mrmybal.github.io/CyVR_QuestDev/?lang=fr) · [Génération locale et déploiement](website/README.md).
 - [Notes de version et limites](docs/releases/v0.9.0-alpha.1.fr.md) · [Téléchargements](https://github.com/MrMybal/CyVR_QuestDev/releases) · [Suivi des problèmes](https://github.com/MrMybal/CyVR_QuestDev/issues).
 - Guides : [journaux](docs/LOGS.md), [fichiers](docs/FILES.md), [métriques](docs/METRICS.md), [mirroring](docs/MIRRORING.md), [plugins](docs/PLUGINS.md) et [IA/MCP/SDK](docs/AI_MCP_SDK.md).
 - [Exemple de SDK Python](examples/list_errors.py) · [Dépôt des sources](https://github.com/MrMybal/CyVR_QuestDev).

@@ -3,7 +3,7 @@
     <td width="300" align="left" valign="top">
       <a href="docs/INSTALLATION.md">Installation guide (FR)</a><br>
       <a href="docs/LOGS.md">Log guide (FR)</a><br>
-      <a href="website/README.md">Showcase (EN / FR)</a><br>
+      <a href="https://mrmybal.github.io/CyVR_QuestDev/">Showcase (EN / FR)</a><br>
       <a href="https://github.com/MrMybal/CyVR_QuestDev">Repository</a><br><br>
       <sub>README</sub><br>
       <a href="README.md">English</a> · <a href="README.fr.md">Français</a>
@@ -51,9 +51,11 @@ The interface translation is still partial. Detailed user guides are currently i
 
 ## Application showcase
 
-Explore the [complete English/French presentation](website/README.md): **14 real application captures** using demonstration data, chapters for the main tools, selectable console views, an in-page image viewer, local guides and links to the Windows Alpha downloads. The showcase text, captions and controls are translated in both languages.
+Explore the [complete English/French presentation](https://mrmybal.github.io/CyVR_QuestDev/): **14 real application captures** using demonstration data, chapters for the main tools, selectable console views, an in-page image viewer, local guides and links to the Windows Alpha downloads. The showcase text, captions and controls are translated in both languages.
 
-[![English QuestDev showcase with the application console — demonstration data](docs/images/showcase-en.jpg)](website/README.md)
+[![English QuestDev showcase with the application console — demonstration data](docs/images/showcase-en.jpg)](https://mrmybal.github.io/CyVR_QuestDev/)
+
+**Open online: [English](https://mrmybal.github.io/CyVR_QuestDev/) · [Français](https://mrmybal.github.io/CyVR_QuestDev/?lang=fr).**
 
 From the project root, build and preview the showcase with Python 3.11+:
 
@@ -62,7 +64,7 @@ python website/build.py
 python website/preview.py
 ```
 
-Open `http://127.0.0.1:50870/questdev/` for English or `http://127.0.0.1:50870/questdev/?lang=fr` for French. The generated `dist/website/` directory is a complete static artifact: keep it together and open `index.html` locally. The [showcase guide](website/README.md) describes its build, preview and documentation format. This preview runs on your computer; no public website is hosted at this stage.
+For a local preview, open `http://127.0.0.1:50870/questdev/` for English or add `?lang=fr` for French. The generated `dist/website/` directory is a complete static artifact: keep it together and open `index.html` locally. The [showcase guide](website/README.md) describes its build, preview, GitHub Pages deployment and documentation format.
 
 ---
 
@@ -140,7 +142,7 @@ This table indexes the main components. Retain the complete [third-party notices
 
 ## References and links
 
-- [Application showcase and local preview](website/README.md).
+- [Application showcase](https://mrmybal.github.io/CyVR_QuestDev/) · [Local build and deployment instructions](website/README.md).
 - [Release notes and limitations](docs/releases/v0.9.0-alpha.1.md) · [Downloads](https://github.com/MrMybal/CyVR_QuestDev/releases) · [Issue tracker](https://github.com/MrMybal/CyVR_QuestDev/issues).
 - User guides in French: [logs](docs/LOGS.md), [files](docs/FILES.md), [metrics](docs/METRICS.md), [mirroring](docs/MIRRORING.md), [plugins](docs/PLUGINS.md) and [AI/MCP/SDK](docs/AI_MCP_SDK.md).
 - [Python SDK example](examples/list_errors.py) · [Source repository](https://github.com/MrMybal/CyVR_QuestDev).

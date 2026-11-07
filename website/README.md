@@ -2,6 +2,8 @@
 
 A complete English/French static presentation of QuestDev: application logs, OVR curves, device actions, applications, mirroring settings, file batches, plugins, AI/MCP/SDK, retention settings, updates, documentation and downloads.
 
+**Live showcase: [English](https://mrmybal.github.io/CyVR_QuestDev/) · [Français](https://mrmybal.github.io/CyVR_QuestDev/?lang=fr).**
+
 ## Build and open
 
 From the project root, with Python 3.11 or later:
@@ -15,7 +17,15 @@ Open **http://127.0.0.1:50870/questdev/** for English or **http://127.0.0.1:5087
 
 The generated entry is `dist/website/index.html`. Copy the **whole `dist/website/` directory** to another location and open `index.html` directly; the page uses local classic JavaScript, styles, images and original Markdown guides, without fetch, CDNs, package installation or a server dependency. `fr.html` also prerenders French for opening without JavaScript. JavaScript enables language switching, the image viewer and console tabs. Opening an image in the viewer stays within the page.
 
-No application installer is included in this website. Its optional GitHub and download links point to the existing public QuestDev Alpha. Those destinations need a network connection. No hosting or deployment workflow is configured by this showcase.
+The GitHub and download links point to the existing public QuestDev Alpha. Those destinations need a network connection; application installers are downloaded from the release.
+
+## GitHub Pages deployment
+
+The repository uses GitHub Actions as its Pages source. `.github/workflows/pages.yml` rebuilds the showcase after relevant changes on `main`, then uploads and deploys **only `dist/website/`**. It can also be run from **Actions → Publish QuestDev showcase → Run workflow**. A successful deployment updates the public English and French URLs above.
+
+The build uses Python 3.13, checks translation parity and local references, and resolves assets relative to the project subpath. Official Actions are pinned to commit revisions. The build job has read access to the source; only the deployment job receives Pages and OIDC write permissions. Generated files remain ignored in Git.
+
+To inspect a deployment, open the workflow run and its **github-pages** environment link. Local preview commands below do not publish the site.
 
 ## Maintained files
 
@@ -51,4 +61,6 @@ python website/preview.py
 
 Ouvrir **http://127.0.0.1:50870/questdev/?lang=fr**. La vitrine présente les fonctions de l’application en français et en anglais. Les captures proviennent du mode démonstration de QuestDev ; les données sont simulées. Les commandes, packages et libellés réellement affichés dans les captures gardent leur langue d’origine.
 
-La sortie complète `dist/website/` peut être déplacée puis ouverte par son fichier `index.html`, sans installation ni serveur. `fr.html` contient aussi le texte français prérendu. Les guides fournis restent les fichiers Markdown français d’origine. Les liens de téléchargement pointent vers la release GitHub existante ; aucun installateur n’est embarqué dans la vitrine. Aucun déploiement n’est effectué par les commandes ci-dessus.
+La sortie complète `dist/website/` peut être déplacée puis ouverte par son fichier `index.html`, sans installation ni serveur. `fr.html` contient aussi le texte français prérendu. Les guides fournis restent les fichiers Markdown français d’origine. Les liens de téléchargement pointent vers la release GitHub existante.
+
+La [vitrine publique en français](https://mrmybal.github.io/CyVR_QuestDev/?lang=fr) est hébergée sur GitHub Pages. Le workflow `.github/workflows/pages.yml` génère et publie uniquement le dossier statique après les changements concernés sur `main`. Il peut aussi être lancé manuellement depuis **Actions → Publish QuestDev showcase**. Les commandes de prévisualisation ci-dessus restent locales.
