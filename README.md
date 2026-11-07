@@ -3,6 +3,7 @@
     <td width="300" align="left" valign="top">
       <a href="docs/INSTALLATION.md">Installation guide (FR)</a><br>
       <a href="docs/LOGS.md">Log guide (FR)</a><br>
+      <a href="website/README.md">Showcase · local preview</a><br>
       <a href="https://github.com/MrMybal/CyVR_QuestDev">Repository</a><br><br>
       <sub>README</sub><br>
       <a href="README.md">English</a> · <a href="README.fr.md">Français</a>
@@ -64,6 +65,17 @@ The installer is unsigned. [Release assets and SHA-256 checksums](https://github
 For an existing installation, open **Settings → GitHub updates** and select the Alpha channel to receive prereleases. The [update guide](docs/UPDATES.md) describes installation and restoration.
 
 ## Source, build and required libraries
+
+### Application showcase
+
+The [complete bilingual showcase](website/README.md) presents the application's workflows with demonstration captures, an in-page image viewer, keyboard navigation, the original local guides and release downloads. Build and preview it with Python 3.11+:
+
+```powershell
+python website/build.py
+python website/preview.py
+```
+
+Open `http://127.0.0.1:50870/questdev/` (English) or add `?lang=fr` (French). The generated `dist/website/index.html` and its complete directory can also be opened locally without a server. The showcase has no published hosting URL at this stage.
 
 <details>
 <summary>Build QuestDev from source on Windows</summary>

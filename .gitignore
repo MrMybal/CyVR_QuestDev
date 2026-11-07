@@ -1,5 +1,6 @@
 /build/
 /captures/
+/dist/
 /assets/branding/*.prompt.txt
 *.log
 *.jsonl

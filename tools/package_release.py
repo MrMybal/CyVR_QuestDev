@@ -100,7 +100,7 @@ def package(output,cyui,build=None):
     copy(build/'CyVR_QuestDev.exe',product/'CyVR_QuestDev.exe')
     copy(build/'UI-BUILD.json',product/'UI-BUILD.json')
     for name in tracked:
-        include=(name.startswith(('assistant/','updater/','plugins/','docs/','examples/','LICENCES/','licenses/')) and not name.startswith(('assistant/tests/','updater/tests/'))) or (name.startswith('assets/branding/') and Path(name).suffix in {'.png','.ico'}) or name in {'README.md','README.fr.md','LICENSE','COPYRIGHT','THIRD_PARTY.md','runtime/requirements.lock','VERSION'}
+        include=(name.startswith(('assistant/','updater/','plugins/','docs/','examples/','website/','LICENCES/','licenses/')) and not name.startswith(('assistant/tests/','updater/tests/'))) or (name.startswith('assets/branding/') and Path(name).suffix in {'.png','.ico'}) or name in {'README.md','README.fr.md','LICENSE','COPYRIGHT','THIRD_PARTY.md','runtime/requirements.lock','VERSION'}
         if include:copy(ROOT/name,product/name)
     for source,target in [('LICENSE','LICENSE.txt'),('COPYRIGHT','COPYRIGHT.txt')]:copy(ROOT/source,product/target)
     prepare_runtime(product,ROOT/'build/release-cache')
