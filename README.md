@@ -1,125 +1,130 @@
-<p align="center">
-  <img src="assets/branding/cyvr-questdev-logo-gradient.png" alt="Logo CyVR QuestDev" width="160">
-</p>
+<table width="100%">
+  <tr>
+    <td width="300" align="left" valign="top">
+      <a href="docs/INSTALLATION.md">Installation guide (FR)</a><br>
+      <a href="docs/LOGS.md">Log guide (FR)</a><br>
+      <a href="https://github.com/MrMybal/CyVR_QuestDev">Repository</a><br><br>
+      <sub>README</sub><br>
+      <a href="README.md">English</a> · <a href="README.fr.md">Français</a>
+    </td>
+    <td width="400" align="center" valign="middle">
+      <img src="assets/branding/cyvr-questdev-logo-gradient.png" alt="CyVR QuestDev" width="128">
+    </td>
+    <td width="300" align="right" valign="top">
+      <p><sub>Application license</sub><br><a href="LICENSE"><strong>GPL-3.0-only</strong></a></p>
+      <p><sub>Version</sub><br><a href="docs/releases/v0.9.0-alpha.1.md"><strong>0.9.0-alpha.1</strong></a><br><strong>ALPHA</strong></p>
+      <p><a href="https://github.com/MrMybal/CyVR_QuestDev/releases/download/v0.9.0-alpha.1/CyVR_QuestDev-0.9.0-alpha.1-Windows-x64-Setup.exe"><strong>Download for Windows</strong></a><br><sub>Windows 10/11 x64 · installer</sub></p>
+    </td>
+  </tr>
+</table>
 
-# CyVR QuestDev 0.9
+<h1 align="center">CyVR QuestDev</h1>
 
-Outils de développement pour Meta Quest, en C++17, Win32 et DirectX 11, avec l’interface modulaire **CyUI 1.2**. Le panneau de texte commun est isolé dans une cible C++20.
+A Windows desktop toolkit for Meta Quest developers. Keep each application's logs separate, manage your headset and files, mirror its display, and record OVR performance data from one workspace. An optional AI assistant, MCP server and Python SDK use the same QuestDev operations.
 
-Copyright © 2026 Cyberalien. Projet sous **GNU GPLv3 uniquement** (`GPL-3.0-only`) : [licence intégrale](LICENSE), [copyright et périmètre](COPYRIGHT). Les composants tiers conservent leurs propres licences, recensées dans [THIRD_PARTY.md](THIRD_PARTY.md).
+> **ALPHA · 0.9.0-alpha.1**
+>
+> An experimental release for testing and feedback. Some features depend on the headset firmware and external Quest applications. Read the [version notes and known limitations](docs/releases/v0.9.0-alpha.1.md).
 
-Neuf espaces possèdent leur propre navigation : **Console, Applications, Réglages, Appareil, ADB, Plugins, Assistant IA, Fichiers et Métriques**. Une application conserve sa propre vue de logs, ses sous-processus et son historique, indépendamment des autres applications du casque.
+[![Console with separate application logs — demonstration data](docs/images/console.png)](docs/images/console.png)
 
-![Console par application](docs/images/console.png)
+## About CyVR QuestDev
 
-![Journal RAW sélectionnable — démonstration](docs/images/console-raw.png)
+Open a package in **Console** to follow its logs, including subprocesses, without mixing in other applications. Compare two applications side by side, search and filter messages, select the original **RAW** text, or sort the column view. Returning to the bottom resumes live following. Capture continues while a view is paused, within the configured line and memory limits.
 
-![Courbes OVR — données de démonstration](docs/images/metrics-curves.png)
+The nine pages have their own navigation: **Console, Applications, Settings, Device, ADB, Plugins, AI assistant, Files and Metrics**. Use Device actions for mirroring and captures, ADB for commands and task output, and Files for immediate transfers or an optional prepared batch. Metrics follows OVR CSV reports and saves sessions on the PC; it does not launch a VR application for you.
 
-## Démarrer
+[![OVR metric curves with a shared time range — demonstration data](docs/images/metrics-curves.png)](docs/images/metrics-curves.png)
 
-Télécharger **Windows-x64-Setup.exe** depuis la [release Alpha](https://github.com/MrMybal/CyVR_QuestDev/releases) pour installer l’app pour votre compte Windows, avec raccourcis et désinstallation. Aucun droit administrateur n’est demandé. Le **ZIP Windows x64** reste disponible pour une utilisation portable : extraire toute l’archive puis lancer `CyVR_QuestDev.exe`. Python et CyToolsCore sont embarqués ; ADB reste externe. Voir [l’installation](docs/INSTALLATION.md) et [la préparation des releases](docs/RELEASE.md).
+## Features
 
-Lancer `build/windows/CyVR_QuestDev.exe`. L’application détecte ADB dans le dossier de l’exécutable, le SDK Android ou le PATH. Le chemin peut être changé dans **Réglages**.
+- **Application logs:** package/subprocess attribution, process lifetime tracking, independent tabs and comparison, severity/tag/PID/text filters, RAW selection and copying, multi-column sorting, and UTF-8 text or JSON Lines export. The default retention budget is 50,000 lines / 64 MiB and can be changed in Settings.
+- **Applications:** installed/running/system categories, counts after filtering, APK installation, launch and stop actions.
+- **Device actions:** H.264 mirroring with PC audio, full screen, cropping, quality controls and optional MKV recording; screenshots, Android MP4 recording, browser links, Perfetto traces and firmware-dependent GPU/HUD/CSV, Wi-Fi ADB, proximity, Guardian and power controls.
+- **Files:** PC/Quest panes, multiple selection, independent paths and filters, immediate transfers or a prepared sequential batch, cancellation, retry and stop-on-error. Transfers cover regular files; Quest folders can be created, renamed and removed when empty.
+- **Metrics and plugins:** plot available OVR CSV columns with shared time navigation and a pinned cursor, follow CSV writes, record on the PC, and import/export CSV. Configure OVR Metrics and CyInsightOVR, save profiles, connect their services and retrieve supported captures through plugins.
+- **AI, MCP and SDK:** Markdown conversations, model selection, streaming, cancellation and inspectable context. Codex can call native QuestDev tools; the other integrated provider profiles currently offer text with context. External MCP clients and the Python SDK can use the operation catalogue.
+- **Appearance and updates:** five themes, two densities, saved EN/FR language preferences for the migrated interface, and DPI scaling. GitHub updates support Alpha/stable channels, verified downloads, restart and backup/restore.
 
-Brancher un Quest avec le mode développeur actif, puis accepter le débogage USB dans le casque. Si un seul appareil autorisé est présent, la connexion est automatique. Avec plusieurs appareils, choisir celui à observer dans la liste en haut.
+The interface translation is still partial. Detailed user guides are currently in French; commands, package names, paths and captured logs keep their original content.
 
-Dans **Console**, la colonne de gauche propose **Actives**, **Installées** et **Système**. Un clic sur une app ouvre son journal dans un onglet. Les apps actives et celles qui émettent des logs passent en tête de liste. **Applications** possède ses propres catégories de gestion ; les autres pages ont leur propre navigation.
+---
 
-## Fonctions disponibles
+## Installation
 
-- **Console** : reprise du suivi au retour en bas, vue **RAW** sélectionnable et copiable, tableau triable par colonne avec tris combinés. [Guide du journal](docs/LOGS.md).
-- Navigation latérale adaptée à chaque page ; le gestionnaire d’applications affiche le nombre installé par catégorie et le nombre réellement affiché après recherche.
-- **Device Actions** : cartes avec icônes et interrupteurs animés pour GPU, HUD/CSV, ADB Wi-Fi, proximité et Boundary ; mirroring H.264 avec audio PC, fenêtre vidéo, plein écran, qualité réglable, recadrage et MKV ; PNG, MP4, navigateur, Perfetto, récupération des CSV, veille/réveil et redémarrage. Les états non lus ou non vérifiés sont signalés. [Guide du mirroring](docs/MIRRORING.md).
-- **ADB** : shell Android ou arguments ADB, sortie progressive, délai maximal, tâches concurrentes, annulation, historique et export.
-- **Plugins** : OVR Metrics et CyInsightOVR configurables directement dans QuestDev, profils locaux, métriques/graphiques, placement du HUD, CSV, connexion au collecteur et captures GPU `.cyovr`. Manifestes `.cyplugin`, actions Android et tunnels TCP ADB forward/reverse. [Guide](docs/PLUGINS.md).
-- **Fichiers** : volet Quest seul ou **PC / Quest côte à côte**, sélection multiple, navigation et filtres indépendants. Transfert immédiat ou **liste préparée optionnelle**, lancement séquentiel du lot, annulation par fichier ou de tout le lot, reprise et arrêt sur erreur. Création, renommage et suppression de fichiers/dossiers vides sur le Quest. [Guide](docs/FILES.md).
-- **Métriques** : toutes les colonnes disponibles des CSV OVR, sélection des courbes, zoom et curseur communs, suivi des écritures du casque, enregistrement sur PC, ouverture et export CSV. [Guide](docs/METRICS.md).
-- **Assistant IA** : discussion intégrée ou fenêtre séparée, contexte inspectable, choix du modèle, réponse progressive, annulation, politique des outils et configuration MCP.
-- **MCP / SDK** : véritable runtime [CyToolsCore 0.10.1 MIT](https://github.com/MrMybal/CyToolsCore), adaptateurs officiels HTTP/MCP et dix-sept opérations communes avec l’interface native. Import automatique des sources locales et export durable des téléchargements et enregistrements.
-- **Mises à jour GitHub** : canaux stable/Alpha, connexion au dépôt privé, téléchargement vérifié, installation avec redémarrage et sauvegarde/restauration de la version précédente. Depuis **Réglages → Mises à jour GitHub**. [Guide](docs/UPDATES.md).
+**Available build: Windows 10/11 x64.** The application bundles Python, CyToolsCore/MCP, plugins and the scrcpy mirroring engine. Android SDK Platform-Tools (**ADB**), AI provider CLIs/accounts and Quest-side applications remain external.
 
-- Capture simultanée des buffers Android `main`, `system`, `crash` et `events`.
-- Journaux par package, y compris les processus `package:service` et `package:renderer`.
-- Suivi des démarrages et arrêts ; l’historique reste rattaché au bon package quand un PID est réutilisé.
-- Onglets par application et affichage de deux applications côte à côte, avec filtres indépendants.
-- Recherche, exclusion, filtre de tag, PID et sévérité minimale.
-- Pause d’affichage, suivi du direct, copie et inspecteur de message par double clic.
-- Export de la vue filtrée en texte UTF-8 ou JSON Lines, avec package, processus, PID, TID, tag, niveau et timestamp.
-- Installation d’un APK, lancement et arrêt d’une application.
-- Détection des appareils déconnectés, non autorisés ou hors ligne ; nouvelle tentative de capture après interruption.
-- Connexion Wi-Fi à un appareil dont ADB TCP/IP est déjà configuré.
-- Cinq thèmes CyUI ; thème et chemin ADB enregistrés dans `%LOCALAPPDATA%/CyVR/QuestDev`.
+1. [Download the 0.9.0 Alpha installer](https://github.com/MrMybal/CyVR_QuestDev/releases/download/v0.9.0-alpha.1/CyVR_QuestDev-0.9.0-alpha.1-Windows-x64-Setup.exe) and follow the wizard. Installation is per user, with shortcuts and an uninstaller; administrator rights are not required.
+2. Alternatively, extract the **complete [Windows x64 portable ZIP](https://github.com/MrMybal/CyVR_QuestDev/releases/download/v0.9.0-alpha.1/CyVR_QuestDev-0.9.0-alpha.1-Windows-x64.zip)** and start `CyVR_QuestDev.exe`. Keep its bundled directories beside it.
+3. Install the official [Android SDK Platform-Tools](https://developer.android.com/tools/releases/platform-tools), enable developer mode on the Quest, connect it and accept USB debugging inside the headset. Choose `adb.exe` in **Settings** if detection fails.
+4. Select your headset. To record OVR data, install OVR Metrics Tool on the Quest and leave the application you want to measure running. Connect an AI provider explicitly if you want to use the assistant.
 
-Le tampon conserve par défaut **50 000 lignes / 64 Mo de données comptabilisées**. **Réglages → Limites du journal** permet de choisir de **1 000 à 5 000 000 lignes** et de **16 à 2 048 Mo**, avec des préréglages et une sauvegarde locale. La première limite atteinte retire les lignes les plus anciennes ; réduire les limites les applique immédiatement. La pause fige l’affichage, mais la capture continue. Le compteur du bas affiche les limites actives et les lignes retirées ou perdues si la file de réception sature.
+The installer is unsigned. [Release assets and SHA-256 checksums](https://github.com/MrMybal/CyVR_QuestDev/releases/tag/v0.9.0-alpha.1) include the matching sources. Mirroring audio requires Android 13+ and may be unavailable in some applications. See the [installation guide](docs/INSTALLATION.md) and [mirroring guide](docs/MIRRORING.md), both in French.
 
-Les processus d’origine incertaine restent dans **Système / non attribué**. Le logiciel ne devine pas leur application à partir d’un UID partagé. Les événements Android de gestion des processus servent à l’attribution et sont masqués par défaut ; les filtres avancés permettent de les afficher.
+For an existing installation, open **Settings → GitHub updates** and select the Alpha channel to receive prereleases. The [update guide](docs/UPDATES.md) describes installation and restoration.
 
-## Raccourcis
+## Source, build and required libraries
 
-| Action | Raccourci |
-| --- | --- |
-| Actualiser les appareils et la capture | F5 |
-| Suspendre / reprendre la vue principale | Espace |
-| Exporter la vue principale en texte | Ctrl+S |
-| Copier la ligne sélectionnée | Ctrl+C |
-| Copier toute la vue filtrée | Ctrl+Maj+C |
-| Vider le journal local | Ctrl+L |
+<details>
+<summary>Build QuestDev from source on Windows</summary>
 
-## Compiler et vérifier
-
-Prérequis : Windows 10/11 x64, Visual Studio 2022 avec les outils C++17/C++20, CMake/Ninja et Python 3. La révision CyUI est épinglée dans `cmake/CyUI.cmake`. Le script utilise un dépôt `CyUI` (ou l’ancien nom `CyImgui_Interface`) voisin, `CYUI_ROOT` ou `-CyUIRoot`, puis extrait le commit exact dans le cache de build. Les modifications du dépôt partagé restent intactes. CMake peut également récupérer directement ce commit. ADB est requis pour utiliser un casque ; il n’est pas redistribué dans ce projet. [Architecture et modules](docs/CYUI_MIGRATION.md).
+Use Visual Studio 2022 with C++17/C++20 tools, CMake 3.20+, Ninja, Git and Python 3.11+. The native host uses C++17; the shared text editor and its adapter use C++20.
 
 ```powershell
+git clone https://github.com/MrMybal/CyVR_QuestDev.git
+cd CyVR_QuestDev
 .\build.ps1 -Test
 .\build.ps1 -Run
-# Autre emplacement de CyUI :
+```
+
+CyUI 1.2.0 is pinned to commit `ff023e646c6a3038b3dfbfd53f6d2b4a2f5955e3` in `cmake/CyUI.cmake`. The build extracts that exact Git revision from a neighbouring `CyUI`/`CyImgui_Interface` checkout, accepts `CYUI_ROOT` or `-CyUIRoot`, or fetches it through CMake. The corresponding Source archive also supplies the pinned CyUI snapshot next to QuestDev.
+
+Only **Core, Plots, Images, DocumentViews and CodeEditor**, plus their **Canvas/Code** dependencies, are selected. The host supplies a single Dear ImGui instance; Audio, Gallery and CEF are disabled. See the [module and build guide](docs/CYUI_MIGRATION.md).
+
+```powershell
+# Explicit CyUI location and separate output directory:
 .\build.ps1 -Test -CyUIRoot ../CyUI -BuildDirectory build/cyui-migration
-# Installer / réparer le Python privé de l’assistant :
+# Prepare the source checkout's assistant runtime and mirroring engine:
 .\runtime\setup.ps1
-.\runtime\python\Scripts\python.exe -m unittest discover -s assistant/tests -v
-# Installer le moteur officiel du mirroring et ses sources correspondantes :
 python tools/setup_mirroring.py
-```
-
-Les tests utilisent un faux exécutable ADB pour contrôler l’attribution, les redémarrages, la réutilisation de PID, les filtres, les limites mémoire, l’échappement JSON et les commandes du backend.
-
-```powershell
-# Captures des cinq thèmes et des différentes vues, sans casque :
-python tools\verify_ui.py
-# Vérification de la vue d’une app qui émet des logs sur un casque connecté :
-python tools\verify_ui.py --live --package com.cyvr.player
-```
-
-Le mode de démonstration n’ouvre aucune connexion ADB :
-
-```powershell
-.\build\windows\CyVR_QuestDev.exe --demo
+# Explore the interface without an ADB connection:
 .\build\windows\CyVR_QuestDev.exe --demo --compare --theme light-grey
-.\build\windows\CyVR_QuestDev.exe --package com.cyvr.player
-.\build\windows\CyVR_QuestDev.exe --page 8 --metrics-csv C:\captures\session.csv
 ```
 
-## IA et extensions
+The default executable is `build/windows/CyVR_QuestDev.exe`. Source builds need the `assistant`, `runtime` and `plugins` directories; the EXE alone does not contain Python. Dependency versions are recorded in `runtime/requirements.lock` and the [third-party notices](THIRD_PARTY.md). See the [architecture](docs/ARCHITECTURE.md) and [packaging instructions](docs/RELEASE.md) for development details.
 
-Le runtime privé dans `runtime/python` démarre avec QuestDev. La connexion au fournisseur IA reste explicite, dans **Assistant IA → Connecter / appliquer le profil**. **Codex** réutilise la connexion du CLI et peut appeler les outils natifs QuestDev. Claude Code, Ollama, OpenRouter, Anthropic, OpenCode et Antigravity proposent actuellement une discussion avec contexte ; leurs appels aux outils QuestDev intégrés ne sont pas encore implémentés. Les clients externes compatibles peuvent employer le MCP.
+</details>
 
-Le contexte contient l’appareil, les applications, les filtres, les plugins, les permissions, des indications d’utilisation et jusqu’à 50 messages de la vue. Il peut être inspecté et son inclusion automatique est réglable. Les outils gardent leur droit de lecture. Les clés API viennent d’une variable d’environnement ou du champ de session, sans sauvegarde dans le profil. Les actions IA/MCP/SDK demandent par défaut une confirmation dans QuestDev.
+---
 
-**Configuration MCP → Copier le JSON MCP** fournit la configuration réelle du client externe. Voir [la connexion IA, MCP et SDK](docs/AI_MCP_SDK.md), [l’exemple Python](examples/list_errors.py) et [le format des plugins](docs/PLUGINS.md). Garder les dossiers `assistant`, `runtime` et `plugins` avec ce projet : l’EXE seul ne contient pas Python. Python 3.11+ est requis pour créer le runtime.
+## License
 
-## Périmètre de cette version
+**CyVR QuestDev uses the [GNU General Public License v3 only](LICENSE) (`GPL-3.0-only`).** Copyright © 2026 Cyberalien. See the [copyright and scope](COPYRIGHT). Third-party components retain their own terms.
 
-La capture commence à la connexion, en direct. Elle ne réattribue pas l’ancien tampon du casque à des PID actuels. Après une interruption, la nouvelle capture repart au présent ; les messages émis pendant l’interruption peuvent manquer. Une origine manquante dans les événements ou un nom de processus personnalisé non rattachable à un package reste non attribué. Les messages de crash émis par un processus système restent accessibles dans la vue globale et la vue système.
+### Third-party libraries and tools
 
-Le mirroring utilise scrcpy dans une fenêtre vidéo dédiée. Sa cadence dépend du casque, de l’application et de la liaison USB/Wi-Fi ; la duplication audio nécessite Android 13+ et peut être refusée par certaines apps. L’enregistrement du flux MKV continue jusqu’à l’arrêt du mirroring, sans limite de 180 secondes. La commande indépendante de vidéo Android MP4 reste limitée à 180 secondes et Perfetto à 120 secondes. Le HUD/CSV nécessite OVR Metrics installé ; son APK n’est pas redistribué. Un tunnel de plugin nécessite un vrai service TCP dans l’application cible. Les réglages VR dépendent du firmware et leur sortie est consultable dans ADB.
+| Library · source | License · terms | Use / scope |
+| --- | --- | --- |
+| [CyUI 1.2.0](https://github.com/MrMybal/CyUI) | [MIT](licenses/CyUI.txt) · [pinned upstream text](https://github.com/MrMybal/CyUI/blob/ff023e646c6a3038b3dfbfd53f6d2b4a2f5955e3/LICENSE) | Native modular interface; selected modules are linked into QuestDev. |
+| [Dear ImGui](https://github.com/ocornut/imgui) | [MIT](licenses/ImGui.txt) | Native widgets and Win32/DX11 backends, supplied through CyUI. |
+| [ImGuiColorTextEdit](https://github.com/goossens/ImGuiColorTextEdit) | [MIT](licenses/CyUI-TextEditor.txt) | Read-only RAW, ADB and JSON editor backend through CyUI CodeEditor. |
+| [Lexilla](https://github.com/ScintillaOrg/lexilla), [Scintilla](https://www.scintilla.org/ScintillaDownload.html), [SciTE](https://www.scintilla.org/SciTEDownload.html) | [Lexilla](licenses/CyUI-Lexilla.txt) · [Scintilla](licenses/CyUI-Scintilla.txt) · [SciTE](licenses/CyUI-SciTE.txt) permissive notices | Syntax engines, headers and language properties through CyUI Code; no Scintilla or SciTE application is linked. |
+| [CyToolsCore 0.10.1](https://github.com/MrMybal/CyToolsCore) | [MIT](LICENCES/CyToolsCore-MIT.txt) | Bundled local operation runtime, HTTP client and MCP adapter. |
+| [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk) | [MIT and Python dependency notices](LICENCES/Python-dependencies.txt) | MCP transport in the assistant runtime. |
+| [CPython 3.13.17](https://github.com/python/cpython) | [PSF and component notices](https://github.com/python/cpython/blob/v3.13.17/LICENSE) | Bundled Python runtime in Windows distributions; its full license is also shipped with Python. |
+| [nlohmann/json 3.11.3](https://github.com/nlohmann/json) | [MIT](LICENCES/nlohmann-json-MIT.txt) | Native JSON parsing and serialization. |
+| [CyUEMCPSDK provider transports](https://github.com/MrMybal/CyUEMCPSDK) | [MIT](LICENCES/ProviderTransports-MIT.txt) | Adapted provider transport sources; provider services and CLIs remain external. |
+| [scrcpy 5.0.1](https://github.com/Genymobile/scrcpy/tree/v5.0.1) | [Apache-2.0](LICENCES/scrcpy-Apache-2.0.txt) | Bundled engine used when mirroring; it runs in a dedicated native video window. |
+| [FFmpeg](https://github.com/FFmpeg/FFmpeg), [libusb](https://libusb.info/) | [LGPL-2.1-or-later: FFmpeg](LICENCES/FFmpeg-LGPL-2.1.txt) · [libusb](LICENCES/libusb-LGPL-2.1.txt) | Replaceable shared libraries from the official scrcpy distribution; matching sources accompany the Source archive. |
+| [SDL](https://libsdl.org/), [dav1d](https://code.videolan.org/videolan/dav1d), [zlib](https://zlib.net/) | [zlib: SDL](LICENCES/SDL-zlib.txt) · [BSD: dav1d](LICENCES/dav1d-BSD.txt) · [zlib](LICENCES/zlib.txt) | Native components/notices of the mirroring distribution. |
+| [Inno Setup 6.7.4](https://github.com/jrsoftware/issrc/releases/tag/is-6_7_4) | [Inno Setup license](LICENCES/Inno-Setup.txt) | Installer build tool; generated Setup/uninstaller retain its notices. |
+| [Android SDK Platform-Tools](https://developer.android.com/tools/releases/platform-tools) | [Android SDK terms](https://developer.android.com/studio/terms) | External ADB executable; not bundled with QuestDev. |
 
-Les transferts concernent les fichiers réguliers. Les copies de dossiers, suppressions récursives, accès root, déploiements de bundles APK et outils Meta de simulation réseau/multijoueur ne sont pas implémentés. Cette version n’annonce pas une parité complète avec MQDH.
+This table indexes the main components. Retain the complete [third-party notices](THIRD_PARTY.md), `LICENCES/`, `licenses/` and the notices supplied with bundled runtimes. Quest-side OVR Metrics and CyInsightOVR are external applications; their APKs/JARs are not redistributed by QuestDev.
 
-Voir [le gestionnaire de fichiers](docs/FILES.md) et [l’exemple de téléchargement avec export](examples/download_file.py). Les fonctions de fichiers de la version 0.3 sont validées avec le backend de test et le MCP natif ; le Quest était déconnecté pendant cette itération.
+## References and links
 
-Voir [l’architecture](docs/ARCHITECTURE.md), [la validation](docs/VALIDATION.md) et [les notices des dépendances](THIRD_PARTY.md).
-
-![Configuration OVR Metrics](docs/images/ovr-metrics.png)
-
-![Configuration CyInsightOVR](docs/images/cyinsight-ovr.png)
+- [Release notes and limitations](docs/releases/v0.9.0-alpha.1.md) · [Downloads](https://github.com/MrMybal/CyVR_QuestDev/releases) · [Issue tracker](https://github.com/MrMybal/CyVR_QuestDev/issues).
+- User guides in French: [logs](docs/LOGS.md), [files](docs/FILES.md), [metrics](docs/METRICS.md), [mirroring](docs/MIRRORING.md), [plugins](docs/PLUGINS.md) and [AI/MCP/SDK](docs/AI_MCP_SDK.md).
+- [Python SDK example](examples/list_errors.py) · [Source repository](https://github.com/MrMybal/CyVR_QuestDev).
+- [CyUI](https://github.com/MrMybal/CyUI) · [CyToolsCore](https://github.com/MrMybal/CyToolsCore) · [Related project: CyVR_UI, MIT](https://github.com/MrMybal/CyVR_UI).
